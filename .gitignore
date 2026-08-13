@@ -1,0 +1,7 @@
+# Ignore environment files globally
+.env*
+.env
+
+# Other generic ignores
+node_modules/
+.DS_Store
