@@ -1,0 +1,1824 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>ΟΛΥΜΠΟΣ — A Descent Through the Pantheon</title>
+<meta name="description" content="A cinematic 3D descent from the aether to the underworld, through five gods of the Greek pantheon." />
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600&family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&family=IBM+Plex+Mono:wght@300;400&display=swap" media="print" onload="this.media='all'">
+
+<style>
+/* ============================================================
+   TOKENS — palette is narrative: it descends with the camera
+   ============================================================ */
+:root{
+  --void:      #05070d;
+  --ink:       #0a0f18;
+  --marble:    #e8e2d4;
+  --marble-dim:#9a958a;
+
+  /* live accent — tweened per stratum by JS */
+  --accent:    #c9a227;
+  --accent-2:  #f0d68a;
+
+  --font-display: "Cinzel", "Trajan Pro", "Optima", "Palatino Linotype", Georgia, serif;
+  --font-body:    "Cormorant Garamond", "Palatino Linotype", Georgia, serif;
+  --font-mono:    "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --gut: clamp(18px, 3.2vw, 54px);
+  --ease: cubic-bezier(.16,1,.3,1);
+}
+
+*{ margin:0; padding:0; box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  background: var(--void);
+  color: var(--marble);
+  font-family: var(--font-body);
+  overflow:hidden;
+  overscroll-behavior:none;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+  touch-action:none;
+  cursor:none;
+}
+@media (hover:none){ body{ cursor:auto; } }
+
+canvas{ display:block; }
+#stage{ position:fixed; inset:0; z-index:0; }
+
+/* ============================================================
+   ATMOSPHERE — vignette, film grain, letterbox
+   ============================================================ */
+.veil{ position:fixed; inset:0; z-index:2; pointer-events:none; }
+.veil.vignette{
+  background:
+    radial-gradient(120% 90% at 50% 45%, transparent 38%, rgba(2,3,7,.55) 78%, rgba(2,3,7,.92) 100%);
+  mix-blend-mode:multiply;
+}
+.veil.grain{
+  opacity:.055; mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/></filter><rect width='160' height='160' filter='url(%23n)' opacity='.5'/></svg>");
+  animation: grainShift 1.1s steps(3) infinite;
+}
+@keyframes grainShift{
+  0%{transform:translate(0,0)} 33%{transform:translate(-3%,2%)} 66%{transform:translate(2%,-3%)} 100%{transform:translate(0,0)}
+}
+.bar{ position:fixed; left:0; right:0; height:0; background:#020307; z-index:6; pointer-events:none; }
+.bar.top{ top:0; } .bar.bottom{ bottom:0; }
+
+/* ============================================================
+   CURSOR — a carved ring that reacts to the descent
+   ============================================================ */
+#cursor{
+  position:fixed; top:0; left:0; z-index:60; pointer-events:none;
+  width:26px; height:26px; margin:-13px 0 0 -13px; border-radius:50%;
+  border:1px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  transition: width .35s var(--ease), height .35s var(--ease), margin .35s var(--ease), border-color .8s linear, opacity .3s;
+  mix-blend-mode:screen;
+}
+#cursor.hot{ width:52px; height:52px; margin:-26px 0 0 -26px; border-color:var(--accent-2); }
+@media (hover:none){ #cursor{ display:none; } }
+
+/* ============================================================
+   HUD
+   ============================================================ */
+.hud{ position:fixed; z-index:5; }
+
+.hud-top{
+  top:0; left:0; right:0; padding:var(--gut);
+  display:flex; align-items:flex-start; justify-content:space-between; gap:24px;
+  pointer-events:none;
+}
+.mark{ pointer-events:auto; }
+.mark .glyph{
+  font-family:var(--font-display); font-size:clamp(15px,1.5vw,20px);
+  letter-spacing:.42em; font-weight:500; color:var(--marble);
+  text-shadow:0 0 26px rgba(0,0,0,.9);
+}
+.mark .sub{
+  margin-top:8px; font-family:var(--font-mono); font-size:10px; font-weight:300;
+  letter-spacing:.26em; text-transform:uppercase; color:var(--marble-dim);
+}
+
+.tools{ display:flex; gap:10px; pointer-events:auto; }
+.tool{
+  font-family:var(--font-mono); font-size:10px; letter-spacing:.18em; text-transform:uppercase;
+  color:var(--marble-dim); background:rgba(8,11,18,.35); backdrop-filter:blur(10px);
+  border:1px solid rgba(232,226,212,.14); border-radius:2px;
+  padding:9px 13px; cursor:none; transition:.35s var(--ease);
+  white-space:nowrap;
+}
+.tool:hover{ color:var(--marble); border-color:color-mix(in srgb, var(--accent) 60%, transparent); }
+.tool[data-on="true"]{ color:var(--accent-2); border-color:color-mix(in srgb, var(--accent) 55%, transparent); }
+.tool .dot{ display:inline-block; width:5px; height:5px; border-radius:50%; background:currentColor; margin-right:7px; vertical-align:middle; opacity:.8; }
+
+/* ---- depth rail (left) : encodes altitude, not decoration ---- */
+.rail{
+  left:var(--gut); top:50%; transform:translateY(-50%);
+  display:flex; align-items:center; gap:14px; pointer-events:none;
+}
+.rail .track{
+  width:1px; height:min(42vh,360px); background:linear-gradient(to bottom, transparent, rgba(232,226,212,.22) 12%, rgba(232,226,212,.22) 88%, transparent);
+  position:relative;
+}
+.rail .tick{
+  position:absolute; left:-4px; width:9px; height:1px; background:var(--accent);
+  box-shadow:0 0 14px var(--accent); transition:background .8s linear, box-shadow .8s linear;
+}
+.rail .notch{ position:absolute; left:-2px; width:5px; height:1px; background:rgba(232,226,212,.4); }
+.rail .read{
+  font-family:var(--font-mono); font-size:10px; letter-spacing:.16em; color:var(--marble-dim);
+  writing-mode:vertical-rl; text-orientation:mixed;
+}
+.rail .read b{ color:var(--accent); font-weight:400; transition:color .8s linear; }
+
+/* ---- index (right) ---- */
+.index{
+  right:var(--gut); top:50%; transform:translateY(-50%);
+  display:flex; flex-direction:column; gap:2px; align-items:flex-end; pointer-events:auto;
+}
+.idx{
+  display:flex; align-items:center; gap:12px; padding:9px 0 9px 18px;
+  background:none; border:0; cursor:none; text-align:right;
+  opacity:.42; transition:opacity .5s var(--ease), transform .5s var(--ease);
+  transform:translateX(0);
+}
+.idx:hover{ opacity:.85; transform:translateX(-6px); }
+.idx[aria-current="true"]{ opacity:1; transform:translateX(-10px); }
+.idx .nm{
+  font-family:var(--font-display); font-size:12px; letter-spacing:.3em; color:var(--marble); font-weight:400;
+}
+.idx[aria-current="true"] .nm{ color:var(--accent-2); }
+.idx .ln{ width:14px; height:1px; background:rgba(232,226,212,.35); transition:width .5s var(--ease), background .5s; }
+.idx[aria-current="true"] .ln{ width:40px; background:var(--accent); }
+
+/* ============================================================
+   PLAQUE — the carved placard. Signature typography moment.
+   ============================================================ */
+.plaque{
+  left:var(--gut); bottom:var(--gut); z-index:5;
+  width:min(46ch, 42vw); pointer-events:auto;
+}
+.eyebrow{
+  font-family:var(--font-mono); font-size:10px; letter-spacing:.3em; text-transform:uppercase;
+  color:var(--marble-dim); display:flex; align-items:center; gap:12px; margin-bottom:18px;
+}
+.eyebrow i{ font-style:normal; color:var(--accent); transition:color .8s linear; }
+.eyebrow s{ text-decoration:none; flex:1; height:1px; background:linear-gradient(to right, rgba(232,226,212,.3), transparent); }
+
+.godname{
+  font-family:var(--font-display); font-weight:500;
+  font-size:clamp(44px, 7.4vw, 116px); line-height:.92; letter-spacing:.02em;
+  display:flex; flex-wrap:wrap; perspective:700px;
+  text-shadow:0 14px 60px rgba(0,0,0,.75);
+}
+.godname .ch{ display:inline-block; transform-origin:50% 100%; will-change:transform,opacity; }
+.godname .sp{ width:.28em; }
+
+.greek{
+  font-family:var(--font-display); font-size:clamp(13px,1.35vw,17px);
+  letter-spacing:.34em; color:var(--accent); margin-top:14px; transition:color .8s linear;
+}
+.epithet{
+  font-family:var(--font-body); font-style:italic; font-weight:300;
+  font-size:clamp(16px,1.5vw,21px); color:var(--marble-dim); margin-top:6px;
+}
+.domains{
+  display:flex; flex-wrap:wrap; gap:8px; margin-top:20px;
+}
+.dom{
+  font-family:var(--font-mono); font-size:9.5px; letter-spacing:.2em; text-transform:uppercase;
+  color:var(--marble-dim); border:1px solid rgba(232,226,212,.16); border-radius:2px; padding:6px 10px;
+}
+.lore{
+  margin-top:20px; font-size:clamp(15px,1.35vw,18px); line-height:1.62; font-weight:300;
+  color:rgba(232,226,212,.76); max-width:44ch;
+}
+
+/* ---- listen ---- */
+.listen{
+  margin-top:26px; display:inline-flex; align-items:center; gap:14px;
+  background:rgba(8,11,18,.34); backdrop-filter:blur(14px);
+  border:1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius:2px; padding:13px 20px 13px 16px; cursor:none;
+  color:var(--marble); transition:.45s var(--ease);
+  position:relative; overflow:hidden;
+}
+.listen:before{
+  content:""; position:absolute; inset:0; background:var(--accent); opacity:0;
+  transition:opacity .45s var(--ease);
+}
+.listen:hover{ border-color:var(--accent); }
+.listen:hover:before{ opacity:.1; }
+.listen span{
+  position:relative; font-family:var(--font-mono); font-size:10.5px; letter-spacing:.24em; text-transform:uppercase;
+}
+.wave{ position:relative; display:flex; align-items:flex-end; gap:2.5px; height:15px; width:26px; }
+.wave b{
+  width:2px; background:var(--accent); height:20%; border-radius:1px; transform-origin:50% 100%;
+  transition:background .8s linear;
+}
+.listen[data-playing="true"]{ border-color:var(--accent); }
+
+/* ============================================================
+   SCROLL HINT
+   ============================================================ */
+.hint{
+  left:50%; bottom:calc(var(--gut) - 4px); transform:translateX(-50%);
+  display:flex; flex-direction:column; align-items:center; gap:10px; pointer-events:none;
+  font-family:var(--font-mono); font-size:9.5px; letter-spacing:.28em; text-transform:uppercase; color:var(--marble-dim);
+}
+.hint .drop{ width:1px; height:44px; background:linear-gradient(to bottom, transparent, var(--accent)); }
+.hint .drop:after{
+  content:""; display:block; width:1px; height:12px; background:var(--marble);
+  animation:fall 2.1s var(--ease) infinite;
+}
+@keyframes fall{ 0%{transform:translateY(-14px);opacity:0} 40%{opacity:1} 100%{transform:translateY(44px);opacity:0} }
+
+/* ============================================================
+   THRESHOLD (loader + enter gate)
+   ============================================================ */
+.threshold{
+  position:fixed; inset:0; z-index:40; background:var(--void);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0;
+  text-align:center; padding:24px;
+}
+.threshold .kicker{
+  font-family:var(--font-mono); font-size:10px; letter-spacing:.34em; text-transform:uppercase;
+  color:var(--marble-dim); margin-bottom:26px;
+}
+.threshold h1{
+  font-family:var(--font-display); font-weight:400;
+  font-size:clamp(38px,8.5vw,124px); letter-spacing:.16em; line-height:1;
+  color:var(--marble); text-indent:.16em;
+}
+.threshold .rule{ width:min(300px,52vw); height:1px; background:rgba(232,226,212,.2); margin:34px 0 30px; position:relative; }
+.threshold .rule i{ position:absolute; left:0; top:0; height:1px; width:0%; background:var(--accent); box-shadow:0 0 16px var(--accent); }
+.threshold .pct{ font-family:var(--font-mono); font-size:10px; letter-spacing:.28em; color:var(--marble-dim); }
+.threshold .tagline{
+  font-family:var(--font-body); font-style:italic; font-weight:300; font-size:clamp(16px,1.9vw,23px);
+  color:rgba(232,226,212,.6); max-width:34ch; margin-top:4px;
+}
+.enter{
+  margin-top:40px; opacity:0; pointer-events:none;
+  font-family:var(--font-mono); font-size:11px; letter-spacing:.3em; text-transform:uppercase;
+  color:var(--marble); background:transparent; border:1px solid var(--accent);
+  border-radius:2px; padding:17px 34px; cursor:none; position:relative; overflow:hidden;
+  transition:color .5s var(--ease), letter-spacing .5s var(--ease);
+}
+.enter i{ position:absolute; inset:0; background:var(--accent); transform:scaleY(0); transform-origin:50% 100%; transition:transform .55s var(--ease); }
+.enter span{ position:relative; }
+.enter:hover i{ transform:scaleY(1); }
+.enter:hover{ color:var(--void); letter-spacing:.36em; }
+.threshold .note{ margin-top:18px; font-family:var(--font-mono); font-size:9px; letter-spacing:.22em; color:rgba(232,226,212,.32); opacity:0; }
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width: 900px){
+  .plaque{ width:auto; right:var(--gut); bottom:calc(var(--gut) + 6px); }
+  .lore{ font-size:15px; max-width:none; }
+  .rail{ display:none; }
+  .hint{ display:none; }
+  .index{ right:12px; gap:0; }
+  .idx .nm{ display:none; }
+  .idx{ padding:10px 0 10px 20px; }
+  .idx .ln{ width:10px; }
+  .idx[aria-current="true"] .ln{ width:26px; }
+  .godname{ font-size:clamp(38px,13vw,72px); }
+  .domains .dom:nth-child(n+4){ display:none; }
+}
+@media (max-height: 620px){
+  .lore{ display:none; }
+  .index{ display:none; }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .veil.grain, .hint .drop:after{ animation:none; }
+}
+.sr{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+:focus-visible{ outline:1px solid var(--accent); outline-offset:4px; }
+</style>
+</head>
+<body>
+
+<div id="stage"></div>
+
+<div class="veil vignette"></div>
+<div class="veil grain"></div>
+<div class="bar top"></div>
+<div class="bar bottom"></div>
+<div id="cursor"></div>
+
+<!-- ============ HUD ============ -->
+<header class="hud hud-top">
+  <div class="mark">
+    <div class="glyph">ΟΛΥΜΠΟΣ</div>
+    <div class="sub">A descent in five strata</div>
+  </div>
+  <nav class="tools">
+    <button class="tool" id="btnAmbience" data-on="true"><i class="dot"></i>Ambience</button>
+    <button class="tool" id="btnQuality" data-on="true">4K</button>
+    <button class="tool" id="btnFps">— fps</button>
+  </nav>
+</header>
+
+<aside class="hud rail" aria-hidden="true">
+  <div class="read">DEPTH <b id="depthRead">0</b> ST</div>
+  <div class="track" id="track"><div class="tick" id="tick"></div></div>
+</aside>
+
+<nav class="hud index" id="index" aria-label="Gods"></nav>
+
+<section class="hud plaque" id="plaque">
+  <div class="eyebrow"><i id="stratum">STRATUM I</i><s></s><span id="realm">THE AETHER</span></div>
+  <h2 class="godname" id="godname" aria-live="polite"></h2>
+  <div class="greek" id="greek"></div>
+  <div class="epithet" id="epithet"></div>
+  <div class="domains" id="domains"></div>
+  <p class="lore" id="lore"></p>
+  <button class="listen" id="listen" data-playing="false">
+    <span class="wave" id="wave"><b></b><b></b><b></b><b></b><b></b></span>
+    <span id="listenLabel">Listen to the myth</span>
+  </button>
+</section>
+
+<div class="hud hint" id="hint">
+  <span>Scroll to descend</span>
+  <div class="drop"></div>
+</div>
+
+<!-- ============ THRESHOLD ============ -->
+<div class="threshold" id="threshold">
+  <div class="kicker">An interactive descent</div>
+  <h1>ΟΛΥΜΠΟΣ</h1>
+  <div class="rule"><i id="loadBar"></i></div>
+  <div class="pct" id="loadPct">CARVING THE MARBLE — 0%</div>
+  <p class="tagline">From the thin air of the aether to the cold rivers below, five gods hold their ground.</p>
+  <button class="enter" id="enterBtn"><i></i><span>Begin the descent</span></button>
+  <div class="note" id="enterNote">Best with sound · headphones recommended</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script>
+/* =============================================================================
+   ΟΛΥΜΠΟΣ — A Descent Through the Pantheon
+   Single-file WebGL experience. Three.js r128 + GSAP 3.
+   Architecture:
+     0. Data + utils        1. Renderer/scene/env
+     2. Procedural marble   3. God artifacts (5 procedural sculptures)
+     4. Atmosphere          5. Audio engine (WebAudio + speech)
+     6. UI / GSAP           7. Scroll rig + render loop
+   ========================================================================== */
+(function () {
+'use strict';
+
+const THREE_ = window.THREE;
+const gsap = window.gsap;
+
+/* =========================== 0. DATA ====================================== */
+
+const PANTHEON = [
+  {
+    key:'zeus', name:'ZEUS', greek:'ΖΕΥΣ', epithet:'He who gathers the clouds',
+    realm:'THE AETHER', stratum:'STRATUM I',
+    domains:['Sky','Thunder','Oaths','Kingship','Hospitality'],
+    lore:'He rules by weather. A promise made in his name is heard by the air itself, and the air keeps no secrets. The bolt is not a weapon so much as a signature — the moment a broken oath is answered out loud.',
+    speech:'Zeus. He who gathers the clouds. He rules by weather, and a promise made in his name is heard by the air itself. The bolt is not a weapon so much as a signature: the moment a broken oath is answered out loud.',
+    accent:'#c9a227', accent2:'#f5dc94', fog:'#0a1020',
+    chord:[110, 164.81, 220, 329.63], drone:'wind'
+  },
+  {
+    key:'athena', name:'ATHENA', greek:'ΑΘΗΝΑ', epithet:'Grey-eyed, born fully armed',
+    realm:'THE CITADEL', stratum:'STRATUM II',
+    domains:['Wisdom','Strategy','Craft','The Loom','Just War'],
+    lore:'She never fights for the joy of it. Where her half-brother brings slaughter, she brings the plan that makes slaughter unnecessary — and when it is necessary, the plan that ends it in one move. Cities are her real weapon.',
+    speech:'Athena. Grey-eyed, born fully armed. She never fights for the joy of it. Where her half-brother brings slaughter, she brings the plan that makes slaughter unnecessary. Cities are her real weapon.',
+    accent:'#a9c6e8', accent2:'#e2eefc', fog:'#0a1424',
+    chord:[130.81, 196, 261.63, 392], drone:'glass'
+  },
+  {
+    key:'apollo', name:'APOLLO', greek:'ΑΠΟΛΛΩΝ', epithet:'Far-shooter, lord of the lyre',
+    realm:'THE MERIDIAN', stratum:'STRATUM III',
+    domains:['Light','Music','Prophecy','Healing','Plague'],
+    lore:'The same hand tunes the lyre and draws the bow. He gives the cure and he gives the sickness, and at Delphi he gives the truth — phrased so precisely that men walk into their fate while trying to escape it.',
+    speech:'Apollo. Far-shooter, lord of the lyre. The same hand tunes the lyre and draws the bow. He gives the cure and he gives the sickness. At Delphi he gives the truth, phrased so precisely that men walk into their fate while trying to escape it.',
+    accent:'#ffb03a', accent2:'#ffe0a3', fog:'#140c10',
+    chord:[146.83, 220, 293.66, 440], drone:'string'
+  },
+  {
+    key:'poseidon', name:'POSEIDON', greek:'ΠΟΣΕΙΔΩΝ', epithet:'Earth-shaker, tamer of horses',
+    realm:'THE DEEP', stratum:'STRATUM IV',
+    domains:['The Sea','Earthquakes','Horses','Storms','Springs'],
+    lore:'He drew the sea in the lottery of brothers and has resented the sky ever since. Strike the ground with the trident and water answers; strike it harder and the ground answers instead. Sailors bargain. He rarely bargains back.',
+    speech:'Poseidon. Earth-shaker, tamer of horses. He drew the sea in the lottery of brothers and has resented the sky ever since. Strike the ground with the trident and water answers. Strike it harder, and the ground answers instead.',
+    accent:'#2fb3a8', accent2:'#8ff0e4', fog:'#04141a',
+    chord:[98, 146.83, 196, 261.63], drone:'ocean'
+  },
+  {
+    key:'hades', name:'HADES', greek:'ΑΙΔΗΣ', epithet:'The unseen one, host of many',
+    realm:'THE ASPHODEL', stratum:'STRATUM V',
+    domains:['The Dead','Wealth','Silence','The Oath','Return'],
+    lore:'Not a devil — a warden, and a fair one. He keeps what is given and asks for nothing more, which is why his kingdom only grows. His single law is the one everyone breaks: do not look back before the threshold.',
+    speech:'Hades. The unseen one, host of many. Not a devil, but a warden, and a fair one. He keeps what is given and asks for nothing more, which is why his kingdom only grows. His single law is the one everyone breaks: do not look back before the threshold.',
+    accent:'#c4442a', accent2:'#ff9d6e', fog:'#0d0508',
+    chord:[73.42, 110, 146.83, 174.61], drone:'ember'
+  }
+];
+
+const N = PANTHEON.length;
+const SPACING_Y = 30;      // vertical fall between strata
+const ORBIT_R   = 11;      // spiral radius of the artifacts
+
+/* =========================== utils ======================================== */
+const clamp = (v,a,b)=> v<a?a:(v>b?b:v);
+const lerp  = (a,b,t)=> a+(b-a)*t;
+const smooth= t => t*t*(3-2*t);
+const damp  = (cur,tgt,l,dt)=> lerp(cur,tgt,1-Math.exp(-l*dt));
+const RAF = window.requestAnimationFrame.bind(window);
+const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function godPosition(i){
+  const a = i * 2.35;
+  return new THREE_.Vector3(Math.cos(a)*ORBIT_R, -i*SPACING_Y, Math.sin(a)*ORBIT_R);
+}
+const GOD_POS = PANTHEON.map((_,i)=>godPosition(i));
+
+/* =========================== GLSL noise =================================== */
+const GLSL_NOISE = `
+vec3 mod289(vec3 x){return x-floor(x*(1.0/289.0))*289.0;}
+vec4 mod289(vec4 x){return x-floor(x*(1.0/289.0))*289.0;}
+vec4 permute(vec4 x){return mod289(((x*34.0)+1.0)*x);}
+vec4 taylorInvSqrt(vec4 r){return 1.79284291400159-0.85373472095314*r;}
+float snoise(vec3 v){
+  const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+  const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+  vec3 i  = floor(v + dot(v, C.yyy));
+  vec3 x0 = v - i + dot(i, C.xxx);
+  vec3 g = step(x0.yzx, x0.xyz);
+  vec3 l = 1.0 - g;
+  vec3 i1 = min(g.xyz, l.zxy);
+  vec3 i2 = max(g.xyz, l.zxy);
+  vec3 x1 = x0 - i1 + C.xxx;
+  vec3 x2 = x0 - i2 + C.yyy;
+  vec3 x3 = x0 - D.yyy;
+  i = mod289(i);
+  vec4 p = permute(permute(permute(
+             i.z + vec4(0.0, i1.z, i2.z, 1.0))
+           + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+           + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+  float n_ = 0.142857142857;
+  vec3 ns = n_ * D.wyz - D.xzx;
+  vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+  vec4 x_ = floor(j * ns.z);
+  vec4 y_ = floor(j - 7.0 * x_);
+  vec4 x = x_ *ns.x + ns.yyyy;
+  vec4 y = y_ *ns.x + ns.yyyy;
+  vec4 h = 1.0 - abs(x) - abs(y);
+  vec4 b0 = vec4(x.xy, y.xy);
+  vec4 b1 = vec4(x.zw, y.zw);
+  vec4 s0 = floor(b0)*2.0 + 1.0;
+  vec4 s1 = floor(b1)*2.0 + 1.0;
+  vec4 sh = -step(h, vec4(0.0));
+  vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
+  vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
+  vec3 p0 = vec3(a0.xy,h.x);
+  vec3 p1 = vec3(a0.zw,h.y);
+  vec3 p2 = vec3(a1.xy,h.z);
+  vec3 p3 = vec3(a1.zw,h.w);
+  vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
+  p0*=norm.x; p1*=norm.y; p2*=norm.z; p3*=norm.w;
+  vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+  m = m * m;
+  return 42.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
+}
+`;
+
+/* =========================== 1. RENDERER / SCENE ========================== */
+const stageEl = document.getElementById('stage');
+
+const renderer = new THREE_.WebGLRenderer({
+  antialias:true, alpha:false, powerPreference:'high-performance', stencil:false
+});
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputEncoding = THREE_.sRGBEncoding;
+renderer.toneMapping = THREE_.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.16;
+renderer.physicallyCorrectLights = true;
+stageEl.appendChild(renderer.domElement);
+
+const scene  = new THREE_.Scene();
+const fogCol = new THREE_.Color(PANTHEON[0].fog);
+scene.fog = new THREE_.FogExp2(fogCol.getHex(), 0.0125);
+scene.background = fogCol.clone();
+
+const camera = new THREE_.PerspectiveCamera(38, innerWidth/innerHeight, 0.1, 800);
+camera.position.set(0, 6, 40);
+
+/* quality --------------------------------------------------------------- */
+const QUALITY = { hi:true, dpr:1 };
+function applyDpr(){
+  const cap = QUALITY.hi ? 2 : 1.25;
+  QUALITY.dpr = Math.min(window.devicePixelRatio || 1, cap);
+  renderer.setPixelRatio(QUALITY.dpr);
+}
+
+/* lighting — a cinematic 3-point rig that travels with the descent ------- */
+const keyLight  = new THREE_.DirectionalLight(0xfff2d8, 3.2);
+keyLight.position.set(6, 9, 7);
+const rimLight  = new THREE_.DirectionalLight(0x8fb6ff, 2.2);
+rimLight.position.set(-8, 2, -6);
+const fillLight = new THREE_.HemisphereLight(0xbfd4ff, 0x120a08, 0.55);
+const godLight  = new THREE_.PointLight(0xffffff, 60, 46, 2.0);
+scene.add(keyLight, rimLight, fillLight, godLight);
+
+/* =========================== 2. PROCEDURAL TEXTURES ====================== */
+
+/** Veined marble — drawn on a canvas so nothing has to be downloaded. */
+function makeMarbleTexture(size, base, vein, veinCount){
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  const x = c.getContext('2d');
+  x.fillStyle = base; x.fillRect(0,0,size,size);
+
+  // soft cloudy substrate
+  for (let i=0;i<170;i++){
+    const r = 40+Math.random()*230, gx = Math.random()*size, gy = Math.random()*size;
+    const g = x.createRadialGradient(gx,gy,0,gx,gy,r);
+    g.addColorStop(0, 'rgba(255,255,255,'+(0.02+Math.random()*0.05)+')');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    x.fillStyle = g; x.beginPath(); x.arc(gx,gy,r,0,6.283); x.fill();
+  }
+  // veins: recursive-ish branching strokes
+  x.lineCap = 'round';
+  for (let i=0;i<veinCount;i++){
+    let px = Math.random()*size, py = Math.random()*size;
+    let ang = Math.random()*Math.PI*2;
+    const segs = 30 + (Math.random()*40|0);
+    x.strokeStyle = vein;
+    x.globalAlpha = 0.06 + Math.random()*0.20;
+    x.lineWidth = 0.5 + Math.random()*2.6;
+    x.beginPath(); x.moveTo(px,py);
+    for (let s=0;s<segs;s++){
+      ang += (Math.random()-0.5)*0.8;
+      px += Math.cos(ang)*(4+Math.random()*12);
+      py += Math.sin(ang)*(4+Math.random()*12);
+      x.lineTo(px,py);
+    }
+    x.stroke();
+  }
+  x.globalAlpha = 1;
+  const tex = new THREE_.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE_.RepeatWrapping;
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  tex.encoding = THREE_.sRGBEncoding;
+  return tex;
+}
+
+/** Equirect sky used for image-based lighting (reflections in the marble). */
+function makeEnvTexture(){
+  const w = 1024, h = 512;
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const x = c.getContext('2d');
+  const g = x.createLinearGradient(0,0,0,h);
+  g.addColorStop(0.00,'#0b1224');
+  g.addColorStop(0.42,'#1a2138');
+  g.addColorStop(0.56,'#c9a98a');
+  g.addColorStop(0.66,'#3a2b28');
+  g.addColorStop(1.00,'#05060a');
+  x.fillStyle = g; x.fillRect(0,0,w,h);
+
+  // a low sun + soft bands = directional highlights on the sculptures
+  const sun = x.createRadialGradient(w*0.72, h*0.5, 0, w*0.72, h*0.5, h*0.42);
+  sun.addColorStop(0,'rgba(255,236,190,1)');
+  sun.addColorStop(0.25,'rgba(255,196,120,.45)');
+  sun.addColorStop(1,'rgba(255,180,90,0)');
+  x.fillStyle = sun; x.fillRect(0,0,w,h);
+
+  const cold = x.createRadialGradient(w*0.16, h*0.34, 0, w*0.16, h*0.34, h*0.5);
+  cold.addColorStop(0,'rgba(150,190,255,.5)');
+  cold.addColorStop(1,'rgba(150,190,255,0)');
+  x.fillStyle = cold; x.fillRect(0,0,w,h);
+
+  for (let i=0;i<60;i++){
+    x.fillStyle = 'rgba(255,255,255,'+(Math.random()*0.5)+')';
+    const s = Math.random()*1.6;
+    x.fillRect(Math.random()*w, Math.random()*h*0.45, s, s);
+  }
+  const tex = new THREE_.CanvasTexture(c);
+  tex.mapping = THREE_.EquirectangularReflectionMapping;
+  tex.encoding = THREE_.sRGBEncoding;
+  return tex;
+}
+
+/** Radial glow sprite used for cheap bloom-like halos. */
+function makeGlowTexture(){
+  const s = 256, c = document.createElement('canvas'); c.width=c.height=s;
+  const x = c.getContext('2d');
+  const g = x.createRadialGradient(s/2,s/2,0,s/2,s/2,s/2);
+  g.addColorStop(0,'rgba(255,255,255,1)');
+  g.addColorStop(0.18,'rgba(255,255,255,.55)');
+  g.addColorStop(0.45,'rgba(255,255,255,.16)');
+  g.addColorStop(1,'rgba(255,255,255,0)');
+  x.fillStyle=g; x.fillRect(0,0,s,s);
+  const t = new THREE_.CanvasTexture(c); t.encoding = THREE_.sRGBEncoding; return t;
+}
+
+let TEX = {};
+
+/* =========================== dissolve injection ========================== */
+/* The signature: a noise-threshold burn that eats the sculpture away and
+   leaves a glowing edge, driven by how far the camera has travelled past it. */
+function attachDissolve(mat, edgeHex, scale){
+  const uD = { value: 0 };
+  const uE = { value: new THREE_.Color(edgeHex) };
+  const uS = { value: scale || 1.15 };
+  mat.userData.uDissolve = uD;
+  mat.userData.uEdge = uE;
+  mat.onBeforeCompile = function(shader){
+    shader.uniforms.uDissolve = uD;
+    shader.uniforms.uEdge = uE;
+    shader.uniforms.uNScale = uS;
+    shader.vertexShader = 'varying vec3 vLocalP;\n' + shader.vertexShader.replace(
+      '#include <begin_vertex>', '#include <begin_vertex>\n  vLocalP = position;'
+    );
+    shader.fragmentShader =
+      'uniform float uDissolve;\nuniform float uNScale;\nuniform vec3 uEdge;\nvarying vec3 vLocalP;\n' +
+      GLSL_NOISE + shader.fragmentShader;
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <dithering_fragment>',
+      `
+      float dN = snoise(vLocalP * uNScale) * 0.5 + 0.5;
+      if (dN < uDissolve) discard;
+      float dEdge = 1.0 - smoothstep(uDissolve, uDissolve + 0.11, dN);
+      gl_FragColor.rgb = mix(gl_FragColor.rgb, uEdge * 2.6, dEdge * step(0.001, uDissolve));
+      #include <dithering_fragment>
+      `);
+  };
+  mat.needsUpdate = true;
+  return mat;
+}
+
+/* =========================== material helpers ============================ */
+function marble(colorHex, rough, clearcoat){
+  const m = new THREE_.MeshPhysicalMaterial({
+    color: colorHex,
+    map: TEX.marble,
+    roughness: rough === undefined ? 0.38 : rough,
+    metalness: 0.04,
+    clearcoat: clearcoat === undefined ? 0.55 : clearcoat,
+    clearcoatRoughness: 0.3,
+    envMapIntensity: 1.15,
+    flatShading: false
+  });
+  return m;
+}
+function stone(colorHex, rough, metal){
+  return new THREE_.MeshPhysicalMaterial({
+    color: colorHex, map: TEX.marble,
+    roughness: rough, metalness: metal, envMapIntensity: 1.4, clearcoat: 0.2
+  });
+}
+function metalMat(colorHex, rough){
+  return new THREE_.MeshStandardMaterial({
+    color: colorHex, metalness: 1.0, roughness: rough === undefined ? 0.2 : rough,
+    envMapIntensity: 1.7
+  });
+}
+function emissiveMat(colorHex, strength){
+  return new THREE_.MeshStandardMaterial({
+    color: 0x000000, emissive: colorHex, emissiveIntensity: strength || 2.4,
+    roughness: 0.4, metalness: 0.0
+  });
+}
+function addMat(colorHex, opacity){
+  return new THREE_.MeshBasicMaterial({
+    color: colorHex, transparent:true, opacity: opacity,
+    blending: THREE_.AdditiveBlending, depthWrite:false, side: THREE_.DoubleSide
+  });
+}
+
+/* ---- audio-reactive point cloud (shared shader) ------------------------- */
+const POINT_VERT = `
+attribute float aSize; attribute float aPhase; attribute float aSpeed;
+uniform float uTime; uniform float uAudio; uniform float uPresence; uniform float uPix; uniform float uRise;
+varying float vA;
+void main(){
+  vec3 p = position;
+  float a = uTime * aSpeed;
+  float c = cos(a), s = sin(a);
+  p.xz = mat2(c, -s, s, c) * p.xz;
+  if (uRise > 0.5){
+    p.y = mod(p.y + uTime * (0.4 + aSpeed), 9.0) - 3.0;
+  } else {
+    p.y += sin(uTime * 0.8 + aPhase) * 0.4;
+  }
+  p *= 1.0 + uAudio * 0.16 * sin(aPhase + uTime * 2.6);
+  vec4 mv = modelViewMatrix * vec4(p, 1.0);
+  gl_PointSize = aSize * uPix * (44.0 / max(-mv.z, 0.6)) * (0.7 + uAudio * 0.85) * (0.35 + 0.65 * uPresence);
+  gl_Position = projectionMatrix * mv;
+  vA = uPresence * (0.5 + 0.5 * uAudio);
+}`;
+const POINT_FRAG = `
+uniform vec3 uColor; varying float vA;
+void main(){
+  float d = length(gl_PointCoord - vec2(0.5));
+  if (d > 0.5) discard;
+  float a = pow(1.0 - d * 2.0, 2.3);
+  gl_FragColor = vec4(uColor, a * vA);
+}`;
+
+const liveUniforms = [];   // every uTime/uAudio/uPresence uniform block
+function makePoints(count, builder, colorHex, sizeMin, sizeMax, rise){
+  const pos = new Float32Array(count*3);
+  const size= new Float32Array(count);
+  const ph  = new Float32Array(count);
+  const sp  = new Float32Array(count);
+  const v = new THREE_.Vector3();
+  for (let i=0;i<count;i++){
+    builder(v, i, count);
+    pos[i*3] = v.x; pos[i*3+1] = v.y; pos[i*3+2] = v.z;
+    size[i] = sizeMin + Math.random()*(sizeMax-sizeMin);
+    ph[i]   = Math.random()*Math.PI*2;
+    sp[i]   = (Math.random()*0.5 + 0.08) * (Math.random()<0.5?-1:1);
+  }
+  const g = new THREE_.BufferGeometry();
+  g.setAttribute('position', new THREE_.BufferAttribute(pos,3));
+  g.setAttribute('aSize', new THREE_.BufferAttribute(size,1));
+  g.setAttribute('aPhase', new THREE_.BufferAttribute(ph,1));
+  g.setAttribute('aSpeed', new THREE_.BufferAttribute(sp,1));
+  const u = {
+    uTime:{value:0}, uAudio:{value:0}, uPresence:{value:0},
+    uPix:{value:QUALITY.dpr}, uColor:{value:new THREE_.Color(colorHex)}, uRise:{value: rise?1:0}
+  };
+  const m = new THREE_.ShaderMaterial({
+    uniforms:u, vertexShader:POINT_VERT, fragmentShader:POINT_FRAG,
+    transparent:true, depthWrite:false, blending:THREE_.AdditiveBlending
+  });
+  liveUniforms.push(u);
+  const pts = new THREE_.Points(g,m);
+  pts.frustumCulled = false;
+  return pts;
+}
+
+/* =========================== 3. THE ARTIFACTS ============================ */
+/* Five sculptures, modelled in code. Each is a "museum object" — a marble
+   core with metal furniture, a halo, and its own particle behaviour.        */
+
+function makeHalo(colorHex, scale, opacity){
+  const s = new THREE_.Sprite(new THREE_.SpriteMaterial({
+    map: TEX.glow, color: colorHex, transparent:true, opacity: opacity,
+    blending: THREE_.AdditiveBlending, depthWrite:false, depthTest:false
+  }));
+  s.scale.set(scale, scale, 1);
+  return s;
+}
+
+function boltGeometry(len, jitter){
+  const pts = [];
+  const steps = 9;
+  for (let i=0;i<=steps;i++){
+    const t = i/steps;
+    pts.push(new THREE_.Vector3(
+      (Math.random()-0.5)*jitter*(1-Math.abs(t-0.5)*1.4),
+      -t*len,
+      (Math.random()-0.5)*jitter*(1-Math.abs(t-0.5)*1.4)
+    ));
+  }
+  return new THREE_.TubeGeometry(new THREE_.CatmullRomCurve3(pts), 40, 0.022, 4, false);
+}
+
+function buildArtifact(god, index){
+  const uStart = liveUniforms.length;
+  const group = new THREE_.Group();
+  group.position.copy(GOD_POS[index]);
+  const inner = new THREE_.Group();          // scaled/dissolved
+  group.add(inner);
+
+  const acc = god.accent, acc2 = god.accent2;
+  const fades = [];                           // additive materials to fade
+  const regFade = (m)=>{ fades.push({m, base:m.opacity}); return m; };
+  const spin = [];                            // {obj, x,y,z}
+  const regSpin = (obj,x,y,z)=>{ spin.push({obj,x:x||0,y:y||0,z:z||0}); return obj; };
+  let custom = null;
+
+  const halo = makeHalo(acc2, 13, 0.32); regFade(halo.material); inner.add(halo);
+
+  if (god.key === 'zeus'){
+    const core = new THREE_.Mesh(new THREE_.IcosahedronGeometry(1.55, 1), attachDissolve(marble(0xe8e2d4, 0.34, 0.7), acc2, 1.1));
+    inner.add(regSpin(core, 0.04, 0.1, 0.02));
+
+    const ringMat = attachDissolve(metalMat(0xc9a227, 0.16), acc2, 0.9);
+    for (let i=0;i<3;i++){
+      const r = new THREE_.Mesh(new THREE_.TorusGeometry(2.5 + i*0.55, 0.022, 8, 140), ringMat);
+      r.rotation.set(Math.PI/2 - i*0.42, i*0.6, i*0.3);
+      inner.add(regSpin(r, 0, (i%2?0.16:-0.12), 0.05));
+    }
+    const shardMat = attachDissolve(metalMat(0xf0d68a, 0.12), acc2, 1.4);
+    const shards = new THREE_.Group();
+    for (let i=0;i<8;i++){
+      const a = (i/8)*Math.PI*2;
+      const s = new THREE_.Mesh(new THREE_.ConeGeometry(0.1, 2.3, 4), shardMat);
+      s.position.set(Math.cos(a)*2.05, 0, Math.sin(a)*2.05);
+      s.rotation.set(Math.PI/2 * (i%2?1:-1), -a, Math.PI/2.4);
+      shards.add(s);
+    }
+    inner.add(regSpin(shards, 0, -0.22, 0));
+
+    const bolts = new THREE_.Group();
+    const boltMat = regFade(addMat(0xdfeaff, 0.0));
+    for (let i=0;i<4;i++){
+      const b = new THREE_.Mesh(boltGeometry(7 + Math.random()*4, 1.6), boltMat);
+      const a = Math.random()*Math.PI*2;
+      b.position.set(Math.cos(a)*2.6, 3.4, Math.sin(a)*2.6);
+      bolts.add(b);
+    }
+    inner.add(bolts);
+    inner.add(makePoints(760, (v,i,c)=>{
+      const a = Math.random()*Math.PI*2, r = 3 + Math.random()*4.5;
+      v.set(Math.cos(a)*r, (Math.random()-0.5)*5.5, Math.sin(a)*r);
+    }, acc2, 0.9, 3.4, false));
+
+    custom = (t, dt, audio)=>{
+      // the strike: rare, sharp, and louder when the narration is speaking
+      boltMat.opacity = Math.min(1, Math.pow(Math.abs(Math.sin(t*1.7)), 26) * 0.9 + audio * 0.3 * Math.random()) * fadeK;
+    };
+  }
+
+  if (god.key === 'athena'){
+    const core = new THREE_.Mesh(new THREE_.OctahedronGeometry(1.55, 0), attachDissolve(marble(0xf0efe9, 0.28, 0.8), acc2, 1.0));
+    inner.add(regSpin(core, 0.05, 0.13, 0));
+
+    const gold = attachDissolve(metalMat(0xd9c07a, 0.15), acc2, 0.9);
+    const aegis = new THREE_.Group();
+    aegis.add(new THREE_.Mesh(new THREE_.TorusGeometry(2.45, 0.045, 10, 128), gold));
+    aegis.add(new THREE_.Mesh(new THREE_.TorusGeometry(2.9, 0.014, 8, 128), gold));
+    for (let i=0;i<28;i++){
+      const a = (i/28)*Math.PI*2;
+      const sp2 = new THREE_.Mesh(new THREE_.BoxGeometry(0.016, 0.016, 0.42), gold);
+      sp2.position.set(Math.cos(a)*2.68, Math.sin(a)*2.68, 0);
+      sp2.rotation.z = a;
+      aegis.add(sp2);
+    }
+    aegis.rotation.x = 0.42;
+    inner.add(regSpin(aegis, 0, 0, 0.14));
+
+    const helixPts = [];
+    for (let i=0;i<=90;i++){
+      const t = i/90, a = t*Math.PI*5.2;
+      helixPts.push(new THREE_.Vector3(Math.cos(a)*(1.9-t*0.5), t*3.4-1.7, Math.sin(a)*(1.9-t*0.5)));
+    }
+    const helix = new THREE_.Mesh(
+      new THREE_.TubeGeometry(new THREE_.CatmullRomCurve3(helixPts), 180, 0.017, 5, false),
+      attachDissolve(emissiveMat(acc2, 2.0), acc2, 0.8));
+    inner.add(regSpin(helix, 0, -0.1, 0));
+
+    const cubes = new THREE_.Group();
+    for (let i=0;i<3;i++){
+      const cb = new THREE_.Mesh(new THREE_.BoxGeometry(0.2,0.2,0.2), gold);
+      const a = (i/3)*Math.PI*2;
+      cb.position.set(Math.cos(a)*3.4, Math.sin(a*1.7)*1.2, Math.sin(a)*3.4);
+      cubes.add(cb);
+    }
+    inner.add(regSpin(cubes, 0.2, -0.3, 0));
+    inner.add(makePoints(620, (v)=>{
+      const a = Math.random()*Math.PI*2, r = 2.6 + Math.random()*3.8;
+      v.set(Math.cos(a)*r, (Math.random()-0.5)*4.0, Math.sin(a)*r);
+    }, acc2, 0.7, 2.6, false));
+  }
+
+  if (god.key === 'apollo'){
+    const core = new THREE_.Mesh(new THREE_.SphereGeometry(1.22, 56, 56), attachDissolve(marble(0xf2e6cf, 0.3, 0.7), acc2, 1.2));
+    inner.add(regSpin(core, 0, 0.07, 0));
+
+    const sunMat = regFade(addMat(acc2, 0.5));
+    const disc = new THREE_.Mesh(new THREE_.RingGeometry(1.7, 1.78, 128), sunMat);
+    inner.add(disc);
+    const disc2 = new THREE_.Mesh(new THREE_.RingGeometry(2.7, 2.73, 128), regFade(addMat(acc, 0.32)));
+    disc2.rotation.z = 0.6; inner.add(regSpin(disc2, 0, 0, 0.05));
+
+    const rays = new THREE_.Group();
+    const rayMat = regFade(addMat(acc2, 0.42));
+    for (let i=0;i<36;i++){
+      const a = (i/36)*Math.PI*2;
+      const len = 0.5 + (i%3)*0.55;
+      const r = new THREE_.Mesh(new THREE_.PlaneGeometry(0.012, len), rayMat);
+      r.position.set(Math.cos(a)*(2.0+len/2), Math.sin(a)*(2.0+len/2), 0);
+      r.rotation.z = a - Math.PI/2;
+      rays.add(r);
+    }
+    inner.add(regSpin(rays, 0, 0, -0.08));
+
+    const gold = attachDissolve(metalMat(0xe8b45a, 0.18), acc2, 0.9);
+    const arm1 = new THREE_.Mesh(new THREE_.TorusGeometry(1.85, 0.05, 8, 90, Math.PI*1.15), gold);
+    arm1.rotation.z = Math.PI*0.42; arm1.position.z = -0.05; inner.add(arm1);
+
+    const strings = new THREE_.Group();
+    const strMat = attachDissolve(emissiveMat(acc2, 2.6), acc2, 0.7);
+    for (let i=0;i<7;i++){
+      const s = new THREE_.Mesh(new THREE_.CylinderGeometry(0.009, 0.009, 2.6 - Math.abs(i-3)*0.18, 5), strMat);
+      s.position.set((i-3)*0.24, 0, 0.9);
+      strings.add(s);
+    }
+    inner.add(strings);
+    inner.add(makePoints(700, (v)=>{
+      const a = Math.random()*Math.PI*2, r = 2.2 + Math.random()*4.4;
+      v.set(Math.cos(a)*r, (Math.random()-0.5)*3.2, Math.sin(a)*r);
+    }, acc2, 0.8, 3.0, false));
+
+    custom = (t, dt, audio)=>{
+      const k = 1 + audio*0.9;
+      for (let i=0;i<strings.children.length;i++){
+        const s = strings.children[i];
+        s.scale.x = s.scale.z = 1 + Math.sin(t*(9+i*1.7))*0.5*audio*2.2;
+      }
+      sunMat.opacity = (0.42 + audio*0.4) * fadeK;
+      rayMat.opacity = (0.3 + audio*0.5) * fadeK;
+      disc.scale.setScalar(k*0.98 + 0.02);
+    };
+  }
+
+  if (god.key === 'poseidon'){
+    const core = new THREE_.Mesh(new THREE_.TorusKnotGeometry(1.08, 0.29, 200, 22, 2, 3),
+      attachDissolve(marble(0xbfd8d4, 0.16, 1.0), acc2, 1.0));
+    inner.add(regSpin(core, 0.05, 0.12, 0));
+
+    const bronze = attachDissolve(metalMat(0x9ecfc8, 0.14), acc2, 0.8);
+    const trident = new THREE_.Group();
+    trident.add(new THREE_.Mesh(new THREE_.CylinderGeometry(0.045, 0.045, 4.6, 10), bronze));
+    for (let i=-1;i<=1;i++){
+      const prong = new THREE_.Mesh(new THREE_.CylinderGeometry(0.032, 0.032, 1.25, 8), bronze);
+      prong.position.set(i*0.42, 2.85, 0);
+      trident.add(prong);
+      const tip = new THREE_.Mesh(new THREE_.ConeGeometry(0.055, 0.42, 8), bronze);
+      tip.position.set(i*0.42, 3.66, 0);
+      trident.add(tip);
+    }
+    trident.add(new THREE_.Mesh(new THREE_.BoxGeometry(1.1, 0.07, 0.07), bronze).translateY(2.25));
+    trident.position.set(0, -0.4, -1.6);
+    trident.rotation.z = 0.16;
+    inner.add(trident);
+
+    const waterU = {
+      uTime:{value:0}, uAudio:{value:0}, uPresence:{value:0},
+      uColor:{value:new THREE_.Color(acc2)}
+    };
+    liveUniforms.push(waterU);
+    const water = new THREE_.Mesh(new THREE_.CircleGeometry(7.2, 128), new THREE_.ShaderMaterial({
+      uniforms: waterU, transparent:true, depthWrite:false, blending:THREE_.AdditiveBlending,
+      side:THREE_.DoubleSide,
+      vertexShader:`uniform float uTime; uniform float uAudio; varying vec2 vUv; varying float vH;
+        void main(){ vUv = uv; vec3 p = position;
+          float r = length(p.xy);
+          vH = sin(r*3.0 - uTime*2.2)*0.16 + sin(r*7.0 - uTime*3.4)*0.07;
+          p.z += vH * (1.0 + uAudio*2.0);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(p,1.0); }`,
+      fragmentShader:`uniform vec3 uColor; uniform float uPresence; uniform float uAudio;
+        varying vec2 vUv; varying float vH;
+        void main(){
+          float r = length(vUv - vec2(0.5)) * 2.0;
+          float ring = abs(vH) * 5.0;
+          float a = (1.0 - smoothstep(0.35, 1.0, r)) * ring * (0.35 + uAudio*0.6) * uPresence;
+          gl_FragColor = vec4(uColor, a);
+        }`
+    }));
+    water.rotation.x = -Math.PI/2;
+    water.position.y = -2.6;
+    inner.add(water);
+
+    inner.add(makePoints(820, (v)=>{
+      const a = Math.random()*Math.PI*2, r = 2.4 + Math.random()*5.2;
+      v.set(Math.cos(a)*r, (Math.random()-0.5)*4.6, Math.sin(a)*r);
+    }, acc2, 0.7, 2.8, false));
+  }
+
+  if (god.key === 'hades'){
+    const core = new THREE_.Mesh(new THREE_.SphereGeometry(1.3, 56, 56),
+      attachDissolve(stone(0x1b141a, 0.14, 0.72), acc2, 1.0));
+    inner.add(regSpin(core, 0, 0.05, 0));
+
+    const shardMat = attachDissolve(stone(0x2a1f22, 0.22, 0.55), acc2, 1.6);
+    const shards = new THREE_.Group();
+    const GA = Math.PI * (3 - Math.sqrt(5));
+    for (let i=0;i<40;i++){
+      const y = 1 - (i/39)*2, rr = Math.sqrt(Math.max(0,1-y*y)), a = GA*i;
+      const s = new THREE_.Mesh(new THREE_.TetrahedronGeometry(0.16 + Math.random()*0.2), shardMat);
+      s.position.set(Math.cos(a)*rr*2.25, y*2.25, Math.sin(a)*rr*2.25);
+      s.rotation.set(Math.random()*3, Math.random()*3, Math.random()*3);
+      shards.add(s);
+    }
+    inner.add(regSpin(shards, 0.03, -0.14, 0.02));
+
+    const ring = new THREE_.Mesh(new THREE_.TorusGeometry(3.1, 0.012, 6, 140), attachDissolve(emissiveMat(acc, 2.2), acc2, 0.7));
+    ring.rotation.x = Math.PI/2 - 0.3;
+    inner.add(regSpin(ring, 0, 0.1, 0));
+
+    const glowCore = makeHalo(acc, 5.2, 0.5); regFade(glowCore.material); inner.add(glowCore);
+
+    inner.add(makePoints(900, (v)=>{
+      const a = Math.random()*Math.PI*2, r = 1.6 + Math.random()*4.6;
+      v.set(Math.cos(a)*r, Math.random()*9 - 3, Math.sin(a)*r);
+    }, acc2, 0.6, 2.4, true));
+  }
+
+  /* ---- presence: scale, dissolve, exit drift, additive fade -------------- */
+  const exitDir = new THREE_.Vector3(Math.cos(index*2.35+1.2), 0.35, Math.sin(index*2.35+1.2)).normalize();
+  const basePos = GOD_POS[index].clone();
+  let fadeK = 0;
+  const localDissolves = [];
+  inner.traverse(o=>{ if (o.material && o.material.userData && o.material.userData.uDissolve){
+    if (localDissolves.indexOf(o.material.userData.uDissolve) < 0) localDissolves.push(o.material.userData.uDissolve);
+  }});
+  const myU = liveUniforms.slice(uStart);   // shader uniforms owned by this artifact
+
+  return {
+    god, group, inner,
+    setPresence(v){
+      fadeK = v;
+      group.visible = v > 0.004;
+      if (!group.visible) return;
+      const e = smooth(clamp(v,0,1));
+      inner.scale.setScalar(0.55 + 0.45*e);
+      const d = Math.pow(1 - e, 0.85) * 1.05;
+      for (let i=0;i<localDissolves.length;i++) localDissolves[i].value = d;
+      for (let i=0;i<fades.length;i++) fades[i].m.opacity = fades[i].base * e;
+      for (let i=0;i<myU.length;i++) myU[i].uPresence.value = e;
+      group.position.copy(basePos).addScaledVector(exitDir, (1-e) * 9);
+      inner.rotation.z = (1-e) * 0.5;
+    },
+    tick(t, dt, audio){
+      for (let i=0;i<spin.length;i++){
+        const s = spin[i];
+        s.obj.rotation.x += s.x*dt; s.obj.rotation.y += s.y*dt; s.obj.rotation.z += s.z*dt;
+      }
+      if (custom) custom(t, dt, audio);
+    },
+    uniforms: myU
+  };
+}
+
+/* =========================== 4. ATMOSPHERE =============================== */
+/* Everything here follows the camera so the fall never runs out of world.  */
+
+const DUST_SPAN = 260;
+const dustU = {
+  uTime:{value:0}, uCamY:{value:0}, uPix:{value:1}, uSpeed:{value:0},
+  uColor:{value:new THREE_.Color(0xdfe6f5)}
+};
+function buildDust(count){
+  const pos = new Float32Array(count*3), sz = new Float32Array(count), ph = new Float32Array(count);
+  for (let i=0;i<count;i++){
+    pos[i*3]   = (Math.random()-0.5)*150;
+    pos[i*3+1] = (Math.random()-0.5)*DUST_SPAN;
+    pos[i*3+2] = (Math.random()-0.5)*150;
+    sz[i] = 0.5 + Math.random()*2.2;
+    ph[i] = Math.random()*6.283;
+  }
+  const g = new THREE_.BufferGeometry();
+  g.setAttribute('position', new THREE_.BufferAttribute(pos,3));
+  g.setAttribute('aSize', new THREE_.BufferAttribute(sz,1));
+  g.setAttribute('aPhase', new THREE_.BufferAttribute(ph,1));
+  const m = new THREE_.ShaderMaterial({
+    uniforms: dustU, transparent:true, depthWrite:false, blending:THREE_.AdditiveBlending,
+    vertexShader:`
+      attribute float aSize; attribute float aPhase;
+      uniform float uTime; uniform float uCamY; uniform float uPix; uniform float uSpeed;
+      varying float vA;
+      void main(){
+        vec3 p = position;
+        p.y = mod(p.y - uCamY + ${(DUST_SPAN/2).toFixed(1)}, ${DUST_SPAN.toFixed(1)}) - ${(DUST_SPAN/2).toFixed(1)} + uCamY;
+        p.x += sin(uTime*0.25 + aPhase)*1.6;
+        p.z += cos(uTime*0.21 + aPhase)*1.6;
+        vec4 mv = modelViewMatrix * vec4(p,1.0);
+        float d = max(-mv.z, 1.0);
+        gl_PointSize = aSize * uPix * (30.0/d) * (1.0 + uSpeed*3.0);
+        gl_Position = projectionMatrix * mv;
+        vA = smoothstep(200.0, 20.0, d) * (0.35 + uSpeed*0.65);
+      }`,
+    fragmentShader:`
+      uniform vec3 uColor; varying float vA;
+      void main(){
+        float d = length(gl_PointCoord - vec2(0.5));
+        if (d > 0.5) discard;
+        gl_FragColor = vec4(uColor, pow(1.0-d*2.0, 2.0) * vA * 0.8);
+      }`
+  });
+  const p = new THREE_.Points(g,m);
+  p.frustumCulled = false;
+  return p;
+}
+
+/* stars: a shell pinned to the camera */
+function buildStars(count){
+  const pos = new Float32Array(count*3), sz = new Float32Array(count);
+  for (let i=0;i<count;i++){
+    const u = Math.random()*2-1, a = Math.random()*Math.PI*2, r = Math.sqrt(1-u*u);
+    pos[i*3] = Math.cos(a)*r*300; pos[i*3+1] = u*300; pos[i*3+2] = Math.sin(a)*r*300;
+    sz[i] = Math.random()*Math.random()*3.4 + 0.4;
+  }
+  const g = new THREE_.BufferGeometry();
+  g.setAttribute('position', new THREE_.BufferAttribute(pos,3));
+  g.setAttribute('aSize', new THREE_.BufferAttribute(sz,1));
+  const m = new THREE_.ShaderMaterial({
+    uniforms:{ uPix:{value:1}, uTime:{value:0}, uFade:{value:1} },
+    transparent:true, depthWrite:false, blending:THREE_.AdditiveBlending, fog:false,
+    vertexShader:`attribute float aSize; uniform float uPix; varying float vS;
+      void main(){ vS = aSize;
+        gl_PointSize = aSize * uPix * 1.1;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    fragmentShader:`uniform float uFade; varying float vS;
+      void main(){
+        float d = length(gl_PointCoord - vec2(0.5));
+        if (d > 0.5) discard;
+        gl_FragColor = vec4(vec3(0.85,0.9,1.0), pow(1.0-d*2.0,2.5) * uFade * 0.9);
+      }`
+  });
+  const p = new THREE_.Points(g,m);
+  p.frustumCulled = false;
+  return p;
+}
+
+/* the sea below — a horizon that is always exactly one fall away */
+const seaU = {
+  uTime:{value:0}, uAudio:{value:0}, uColor:{value:new THREE_.Color(PANTHEON[0].accent)},
+  uColor2:{value:new THREE_.Color(PANTHEON[0].accent2)}
+};
+function buildSea(){
+  const g = new THREE_.PlaneGeometry(600, 600, 150, 150);
+  const m = new THREE_.ShaderMaterial({
+    uniforms: seaU, transparent:true, depthWrite:false, side:THREE_.DoubleSide,
+    blending: THREE_.AdditiveBlending,
+    vertexShader: GLSL_NOISE + `
+      uniform float uTime; uniform float uAudio; varying float vH; varying vec2 vUv;
+      void main(){
+        vUv = uv; vec3 p = position;
+        float n = snoise(vec3(p.xy*0.012, uTime*0.06));
+        float n2 = snoise(vec3(p.xy*0.045, uTime*0.11));
+        vH = n*3.4 + n2*1.1;
+        p.z += vH * (1.0 + uAudio*0.8);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(p,1.0);
+      }`,
+    fragmentShader:`
+      uniform vec3 uColor; uniform vec3 uColor2; uniform float uAudio;
+      varying float vH; varying vec2 vUv;
+      void main(){
+        float r = length(vUv - vec2(0.5)) * 2.0;
+        float crest = smoothstep(0.4, 2.4, vH);
+        vec3 col = mix(uColor*0.35, uColor2, crest);
+        float a = (1.0 - smoothstep(0.15, 0.85, r)) * (0.10 + crest*0.42) * (0.8 + uAudio*0.5);
+        gl_FragColor = vec4(col, a);
+      }`
+  });
+  const mesh = new THREE_.Mesh(g,m);
+  mesh.rotation.x = -Math.PI/2;
+  mesh.frustumCulled = false;
+  return mesh;
+}
+
+/* =========================== 5. AUDIO ==================================== */
+const NOISE_BP = { wind:760, glass:2600, string:1150, ocean:420, ember:190 };
+const NOISE_GN = { wind:0.10, glass:0.045, string:0.035, ocean:0.15, ember:0.11 };
+
+const AudioEngine = {
+  ctx:null, master:null, analyser:null, bins:null,
+  noiseBuf:null, drone:null, ambience:true, ready:false,
+  level:0, speechPulse:0, speaking:false, onSpeechEnd:null, chantNodes:null,
+
+  init(){
+    if (this.ready) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    this.ctx = new AC();
+    this.master = this.ctx.createGain();
+    this.master.gain.value = 0.0;
+    this.analyser = this.ctx.createAnalyser();
+    this.analyser.fftSize = 512;
+    this.analyser.smoothingTimeConstant = 0.75;
+    this.bins = new Uint8Array(this.analyser.frequencyBinCount);
+    this.master.connect(this.analyser);
+    this.analyser.connect(this.ctx.destination);
+
+    const len = this.ctx.sampleRate * 2.2;
+    this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+    const ch = this.noiseBuf.getChannelData(0);
+    let last = 0;
+    for (let i=0;i<len;i++){ const w = Math.random()*2-1; last = (last + 0.03*w)/1.03; ch[i] = last*3.2; }
+    this.ready = true;
+  },
+
+  resume(){
+    if (!this.ctx) this.init();
+    if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+  },
+
+  makeDrone(god){
+    const ctx = this.ctx, t = ctx.currentTime;
+    const out = ctx.createGain(); out.gain.value = 0;
+    out.connect(this.master);
+    const filt = ctx.createBiquadFilter();
+    filt.type = 'lowpass'; filt.frequency.value = 850; filt.Q.value = 1.1;
+    filt.connect(out);
+    const nodes = [];
+    god.chord.forEach((f,i)=>{
+      [[f,'triangle',0.16],[f*1.006,'sine',0.09],[f*0.5,'sine',0.07]].forEach(cfg=>{
+        const o = ctx.createOscillator(); o.type = cfg[1]; o.frequency.value = cfg[0];
+        const g = ctx.createGain(); g.gain.value = cfg[2]/(i+1.3);
+        o.connect(g); g.connect(filt); o.start(t); nodes.push(o);
+      });
+    });
+    const src = ctx.createBufferSource(); src.buffer = this.noiseBuf; src.loop = true;
+    const bp = ctx.createBiquadFilter();
+    bp.type = god.drone === 'ocean' ? 'lowpass' : 'bandpass';
+    bp.frequency.value = NOISE_BP[god.drone] || 800; bp.Q.value = 0.9;
+    const ng = ctx.createGain(); ng.gain.value = NOISE_GN[god.drone] || 0.06;
+    src.connect(bp); bp.connect(ng); ng.connect(out); src.start(t); nodes.push(src);
+
+    const lfo = ctx.createOscillator(); lfo.frequency.value = 0.05 + Math.random()*0.06;
+    const lg = ctx.createGain(); lg.gain.value = 320;
+    lfo.connect(lg); lg.connect(filt.frequency); lfo.start(t); nodes.push(lfo);
+
+    const amp = ctx.createOscillator(); amp.frequency.value = 0.09;
+    const ag = ctx.createGain(); ag.gain.value = 0.35;
+    amp.connect(ag); ag.connect(out.gain); amp.start(t); nodes.push(amp);
+
+    return { out, nodes, filt };
+  },
+
+  setGod(god, fade){
+    if (!this.ready || !this.ctx) return;
+    const t = this.ctx.currentTime, f = fade === undefined ? 1.6 : fade;
+    const old = this.drone;
+    if (old){
+      old.out.gain.cancelScheduledValues(t);
+      old.out.gain.setValueAtTime(old.out.gain.value, t);
+      old.out.gain.linearRampToValueAtTime(0, t + f);
+      setTimeout(()=>{ try{ old.nodes.forEach(n=>n.stop()); old.out.disconnect(); }catch(e){} }, (f+0.3)*1000);
+    }
+    const d = this.makeDrone(god);
+    d.out.gain.setValueAtTime(0, t);
+    d.out.gain.linearRampToValueAtTime(0.62, t + f);
+    this.drone = d;
+  },
+
+  setAmbience(on, instant){
+    this.ambience = on;
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.master.gain.cancelScheduledValues(t);
+    this.master.gain.setValueAtTime(this.master.gain.value, t);
+    this.master.gain.linearRampToValueAtTime(on ? 0.9 : 0.0, t + (instant?0.05:1.1));
+  },
+
+  duck(on){
+    if (!this.drone || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    const g = this.drone.out.gain;
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(g.value, t);
+    g.linearRampToValueAtTime(on ? 0.26 : 0.62, t + 0.8);
+  },
+
+  /* narration: real speech when the browser has it, a sung line when it doesn't */
+  speak(text, god, onend){
+    this.resume();
+    this.duck(true);
+    this.onSpeechEnd = onend;
+    if ('speechSynthesis' in window && window.speechSynthesis.getVoices){
+      const synth = window.speechSynthesis;
+      synth.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      const voices = synth.getVoices() || [];
+      const pick = voices.find(v=>/en-GB/i.test(v.lang) && /male|daniel|george|arthur/i.test(v.name))
+                || voices.find(v=>/en-GB/i.test(v.lang))
+                || voices.find(v=>/^en/i.test(v.lang));
+      if (pick) u.voice = pick;
+      u.rate = 0.84; u.pitch = 0.85; u.volume = 1;
+      u.onboundary = ()=>{ this.speechPulse = 1; };
+      u.onend = ()=>{ this.endSpeech(); };
+      u.onerror = ()=>{ this.endSpeech(); };
+      this.speaking = true;
+      synth.speak(u);
+      return true;
+    }
+    this.chant(god);
+    return true;
+  },
+
+  chant(god){
+    if (!this.ctx) return;
+    const ctx = this.ctx, t0 = ctx.currentTime;
+    const g = ctx.createGain(); g.gain.value = 0; g.connect(this.master);
+    const notes = god.chord.concat(god.chord.map(f=>f*1.5)).sort(()=>Math.random()-0.5);
+    const nodes = [];
+    for (let i=0;i<10;i++){
+      const o = ctx.createOscillator(); o.type='sine';
+      o.frequency.value = notes[i % notes.length]*2;
+      const ng = ctx.createGain(); ng.gain.value = 0;
+      const t = t0 + i*1.1;
+      ng.gain.setValueAtTime(0,t);
+      ng.gain.linearRampToValueAtTime(0.16, t+0.35);
+      ng.gain.linearRampToValueAtTime(0, t+1.15);
+      o.connect(ng); ng.connect(g); o.start(t); o.stop(t+1.3);
+      nodes.push(o);
+    }
+    g.gain.setValueAtTime(1,t0);
+    this.speaking = true;
+    this.chantNodes = nodes;
+    setTimeout(()=>this.endSpeech(), 11500);
+  },
+
+  stopSpeech(){
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    if (this.chantNodes){ this.chantNodes.forEach(n=>{ try{ n.stop(); }catch(e){} }); this.chantNodes = null; }
+    this.endSpeech();
+  },
+
+  endSpeech(){
+    if (!this.speaking) return;
+    this.speaking = false;
+    this.duck(false);
+    if (this.onSpeechEnd) { const f = this.onSpeechEnd; this.onSpeechEnd = null; f(); }
+  },
+
+  update(dt){
+    let raw = 0;
+    if (this.analyser){
+      this.analyser.getByteFrequencyData(this.bins);
+      let sum = 0; const n = Math.min(64, this.bins.length);
+      for (let i=2;i<n;i++) sum += this.bins[i];
+      raw = (sum/(n-2))/255;
+    }
+    this.speechPulse = damp(this.speechPulse, 0, 5.5, dt);
+    const floor = this.speaking ? 0.30 : 0.0;
+    const target = clamp(raw*1.9 + this.speechPulse*0.75 + floor, 0, 1);
+    this.level = damp(this.level, target, this.speaking ? 14 : 6, dt);
+    return this.level;
+  }
+};
+
+/* =========================== 6. WORLD ASSEMBLY =========================== */
+const artifacts = [];
+let dust = null, stars = null, sea = null;
+const focus = new THREE_.Object3D();      // what the lights aim at
+scene.add(focus);
+keyLight.target = focus;
+rimLight.target = focus;
+
+/* camera path: an anchor beside each artifact, splined into one fall */
+const camAnchors = PANTHEON.map((_,i)=>{
+  const a = i*2.35 + 0.62;
+  return new THREE_.Vector3(Math.cos(a)*20.5, -i*SPACING_Y + 5.2, Math.sin(a)*20.5);
+});
+const camCurve = new THREE_.CatmullRomCurve3(camAnchors, false, 'centripetal', 0.5);
+
+/* =========================== 7. STATE / UI =============================== */
+const S = {
+  p: 0, target: 0, vel: 0, active: -1, entered: false,
+  mx: 0, my: 0, tmx: 0, tmy: 0, intro: 1, shakeSeed: Math.random()*100
+};
+
+const el = {
+  godname: document.getElementById('godname'),
+  greek:   document.getElementById('greek'),
+  epithet: document.getElementById('epithet'),
+  domains: document.getElementById('domains'),
+  lore:    document.getElementById('lore'),
+  stratum: document.getElementById('stratum'),
+  realm:   document.getElementById('realm'),
+  listen:  document.getElementById('listen'),
+  listenLabel: document.getElementById('listenLabel'),
+  wave:    document.getElementById('wave').querySelectorAll('b'),
+  index:   document.getElementById('index'),
+  track:   document.getElementById('track'),
+  tick:    document.getElementById('tick'),
+  depth:   document.getElementById('depthRead'),
+  hint:    document.getElementById('hint'),
+  barTop:  document.querySelector('.bar.top'),
+  barBot:  document.querySelector('.bar.bottom'),
+  threshold: document.getElementById('threshold'),
+  loadBar: document.getElementById('loadBar'),
+  loadPct: document.getElementById('loadPct'),
+  enterBtn:document.getElementById('enterBtn'),
+  enterNote:document.getElementById('enterNote'),
+  btnAmbience: document.getElementById('btnAmbience'),
+  btnQuality:  document.getElementById('btnQuality'),
+  btnFps:      document.getElementById('btnFps'),
+  cursor:  document.getElementById('cursor')
+};
+
+/* index rail + depth notches */
+PANTHEON.forEach((g,i)=>{
+  const b = document.createElement('button');
+  b.className = 'idx';
+  b.innerHTML = '<span class="nm">'+g.name+'</span><span class="ln"></span>';
+  b.addEventListener('click', ()=>goTo(i));
+  el.index.appendChild(b);
+  const n = document.createElement('div');
+  n.className = 'notch';
+  n.style.top = (i/(N-1))*100 + '%';
+  el.track.appendChild(n);
+});
+const idxBtns = el.index.querySelectorAll('.idx');
+
+/* ---- plaque painting --------------------------------------------------- */
+function letters(name){
+  el.godname.innerHTML = '';
+  for (let i=0;i<name.length;i++){
+    const c = name[i];
+    const s = document.createElement('span');
+    if (c === ' '){ s.className = 'sp'; el.godname.appendChild(s); continue; }
+    s.className = 'ch'; s.textContent = c;
+    el.godname.appendChild(s);
+  }
+  return el.godname.querySelectorAll('.ch');
+}
+
+function fillPlaque(g){
+  const chars = letters(g.name);
+  el.greek.textContent = g.greek;
+  el.epithet.textContent = g.epithet;
+  el.stratum.textContent = g.stratum;
+  el.realm.textContent = g.realm;
+  el.lore.textContent = g.lore;
+  el.domains.innerHTML = '';
+  g.domains.forEach(d=>{
+    const s = document.createElement('span');
+    s.className = 'dom'; s.textContent = d;
+    el.domains.appendChild(s);
+  });
+  return chars;
+}
+
+const outEls = ()=>[el.greek, el.epithet, el.domains, el.lore, el.listen];
+let uiTl = null;
+
+function paintGod(i, instant){
+  const g = PANTHEON[i];
+  document.documentElement.style.setProperty('--accent', g.accent);
+  document.documentElement.style.setProperty('--accent-2', g.accent2);
+  idxBtns.forEach((b,k)=>b.setAttribute('aria-current', k===i ? 'true':'false'));
+
+  if (AudioEngine.speaking) { AudioEngine.stopSpeech(); }
+  setListenState(false);
+
+  if (uiTl) uiTl.kill();
+  const reveal = ()=>{
+    const chars = fillPlaque(g);
+    if (REDUCED){
+      gsap.set(chars, {opacity:1, y:0, rotateX:0});
+      gsap.set(outEls(), {opacity:1, y:0, filter:'blur(0px)'});
+      return;
+    }
+    gsap.fromTo(chars,
+      { yPercent: 90, opacity: 0, rotateX: -72 },
+      { yPercent: 0, opacity: 1, rotateX: 0, duration: 1.0, ease: 'power3.out',
+        stagger: { each: 0.045 } });
+    gsap.fromTo([el.stratum, el.realm],
+      { opacity: 0, x: -8 }, { opacity: 1, x: 0, duration: 0.7, ease: 'power2.out', stagger: 0.07 });
+    gsap.fromTo(outEls(),
+      { y: 20, opacity: 0, filter: 'blur(7px)' },
+      { y: 0, opacity: 1, filter: 'blur(0px)', duration: 0.85, ease: 'power3.out', stagger: 0.07, delay: 0.16 });
+  };
+
+  if (instant || REDUCED){ reveal(); return; }
+
+  uiTl = gsap.timeline();
+  uiTl.to(el.godname.querySelectorAll('.ch'),
+      { yPercent:-55, opacity:0, duration:0.3, ease:'power2.in', stagger:{each:0.014, from:'random'} }, 0)
+    .to(outEls(), { y:-12, opacity:0, filter:'blur(6px)', duration:0.3, ease:'power2.in', stagger:0.02 }, 0)
+    .to([el.stratum, el.realm], { opacity:0, duration:0.25 }, 0)
+    .add(reveal, 0.34);
+}
+
+/* ---- listen ------------------------------------------------------------ */
+function setListenState(on){
+  el.listen.setAttribute('data-playing', on ? 'true':'false');
+  el.listenLabel.textContent = on ? 'Stop the narration' : 'Listen to the myth';
+}
+el.listen.addEventListener('click', ()=>{
+  if (AudioEngine.speaking){ AudioEngine.stopSpeech(); setListenState(false); return; }
+  AudioEngine.resume();
+  const g = PANTHEON[S.active];
+  AudioEngine.speak(g.speech, g, ()=>setListenState(false));
+  setListenState(true);
+});
+
+/* ---- tools ------------------------------------------------------------- */
+el.btnAmbience.addEventListener('click', ()=>{
+  const on = el.btnAmbience.getAttribute('data-on') !== 'true';
+  el.btnAmbience.setAttribute('data-on', on ? 'true':'false');
+  AudioEngine.setAmbience(on);
+});
+el.btnQuality.addEventListener('click', ()=>{
+  QUALITY.hi = !QUALITY.hi;
+  el.btnQuality.setAttribute('data-on', QUALITY.hi ? 'true':'false');
+  el.btnQuality.textContent = QUALITY.hi ? '4K' : 'Lite';
+  applyDpr();
+});
+
+/* ---- navigation -------------------------------------------------------- */
+let snapTween = null, wheelTimer = 0;
+function goTo(i){
+  if (snapTween) snapTween.kill();
+  snapTween = gsap.to(S, { target: clamp(i,0,N-1), duration: 1.9, ease: 'power3.inOut' });
+  hideHint();
+}
+function nudge(d){ goTo(Math.round(S.target) + d); }
+function hideHint(){
+  if (el.hint.dataset.gone) return;
+  el.hint.dataset.gone = '1';
+  gsap.to(el.hint, { opacity:0, y:14, duration:0.6, ease:'power2.out' });
+}
+
+function onWheel(e){
+  e.preventDefault();
+  if (!S.entered) return;
+  if (snapTween) snapTween.kill();
+  const d = clamp(e.deltaY, -110, 110);
+  S.target = clamp(S.target + d*0.0022, 0, N-1);
+  hideHint();
+  clearTimeout(wheelTimer);
+  wheelTimer = setTimeout(()=>{
+    snapTween = gsap.to(S, { target: Math.round(S.target), duration: 1.25, ease:'power3.inOut' });
+  }, 380);
+}
+window.addEventListener('wheel', onWheel, { passive:false });
+
+let touchY = 0;
+window.addEventListener('touchstart', e=>{ touchY = e.touches[0].clientY; if (snapTween) snapTween.kill(); }, {passive:true});
+window.addEventListener('touchmove', e=>{
+  if (!S.entered) return;
+  const y = e.touches[0].clientY, d = touchY - y; touchY = y;
+  S.target = clamp(S.target + d*0.0065, 0, N-1);
+  hideHint();
+  clearTimeout(wheelTimer);
+  wheelTimer = setTimeout(()=>{
+    snapTween = gsap.to(S, { target: Math.round(S.target), duration: 1.1, ease:'power3.inOut' });
+  }, 300);
+}, {passive:true});
+
+window.addEventListener('keydown', e=>{
+  if (!S.entered) return;
+  if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' '){ e.preventDefault(); nudge(1); }
+  if (e.key === 'ArrowUp' || e.key === 'PageUp'){ e.preventDefault(); nudge(-1); }
+  if (e.key === 'Home'){ goTo(0); }
+  if (e.key === 'End'){ goTo(N-1); }
+  if (e.key.toLowerCase() === 'l'){ el.listen.click(); }
+});
+
+window.addEventListener('mousemove', e=>{
+  S.tmx = (e.clientX/innerWidth - 0.5) * 2;
+  S.tmy = (e.clientY/innerHeight - 0.5) * 2;
+});
+
+/* cursor */
+if (window.matchMedia('(hover:hover)').matches){
+  const qx = gsap.quickTo(el.cursor, 'x', { duration:0.32, ease:'power3' });
+  const qy = gsap.quickTo(el.cursor, 'y', { duration:0.32, ease:'power3' });
+  window.addEventListener('mousemove', e=>{ qx(e.clientX); qy(e.clientY); });
+  document.querySelectorAll('button, .idx, .listen, .tool').forEach(b=>{
+    b.addEventListener('mouseenter', ()=>el.cursor.classList.add('hot'));
+    b.addEventListener('mouseleave', ()=>el.cursor.classList.remove('hot'));
+  });
+}
+
+window.addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  applyDpr();
+});
+
+/* =========================== 8. RENDER LOOP ============================== */
+const clock = new THREE_.Clock();
+const tmpV = new THREE_.Vector3(), tmpW = new THREE_.Vector3();
+const camPos = new THREE_.Vector3(), focusPos = new THREE_.Vector3();
+const cA = new THREE_.Color(), cB = new THREE_.Color(), cMix = new THREE_.Color();
+const cA2 = new THREE_.Color(), cB2 = new THREE_.Color();
+let frames = 0, fpsAcc = 0, autoDropped = false, lastDepth = -1;
+
+function frame(){
+  RAF(frame);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+
+  /* --- scroll integration (single source of truth) --- */
+  const prev = S.p;
+  S.p = damp(S.p, S.target, 3.4, dt);
+  S.vel = Math.abs(S.p - prev) / Math.max(dt, 0.001);
+
+  const audio = AudioEngine.update(dt);
+
+  const i0 = clamp(Math.floor(S.p), 0, N-1);
+  const i1 = clamp(i0 + 1, 0, N-1);
+  const fr = clamp(S.p - i0, 0, 1);
+  const bulge = Math.sin(fr * Math.PI);
+
+  /* --- focus + camera rig --- */
+  focusPos.copy(GOD_POS[i0]).lerp(GOD_POS[i1], smooth(fr));
+  camCurve.getPoint(N > 1 ? clamp(S.p/(N-1), 0, 1) : 0, camPos);
+
+  tmpV.set(camPos.x, 0, camPos.z).normalize();
+  camPos.addScaledVector(tmpV, -bulge * 7.5);   // dive inward mid-transition
+  camPos.y -= bulge * 3.4;
+
+  S.mx = damp(S.mx, S.tmx, 3.0, dt);
+  S.my = damp(S.my, S.tmy, 3.0, dt);
+  camPos.x += S.mx * 1.9;
+  camPos.y += -S.my * 1.3;
+
+  if (S.intro > 0.0005){
+    camPos.addScaledVector(tmpV, S.intro * 40);
+    camPos.y += S.intro * 12;
+  }
+
+  camera.position.copy(camPos);
+  camera.lookAt(focusPos.x + S.mx * 0.9, focusPos.y - S.my * 0.7, focusPos.z);
+
+  const shake = audio * 0.6 + clamp(S.vel * 0.05, 0, 0.5);
+  camera.rotation.z += bulge * 0.13 + Math.sin(t * 7.3) * 0.012 * shake;
+  camera.position.x += Math.sin(t * 11.1) * 0.07 * shake;
+  camera.position.y += Math.cos(t * 9.73) * 0.07 * shake;
+  camera.fov = 38 + bulge * 7 + S.intro * 18 + audio * 1.4;
+  camera.updateProjectionMatrix();
+
+  /* --- artifacts --- */
+  const act = Math.round(S.p);
+  for (let i = 0; i < N; i++){
+    const pres = clamp(1 - Math.abs(S.p - i) * 0.95, 0, 1);
+    artifacts[i].setPresence(pres);
+    if (pres > 0.01) artifacts[i].tick(t, dt, i === act ? audio : audio * 0.35);
+  }
+
+  /* --- shared uniforms (no React-style state churn in here) --- */
+  for (let i = 0; i < liveUniforms.length; i++){
+    const u = liveUniforms[i];
+    if (u.uTime) u.uTime.value = t;
+    if (u.uAudio) u.uAudio.value = audio;
+    if (u.uPix) u.uPix.value = QUALITY.dpr;
+  }
+
+  /* --- palette of the descent --- */
+  cA.set(PANTHEON[i0].fog);    cB.set(PANTHEON[i1].fog);
+  cMix.copy(cA).lerp(cB, fr);
+  scene.fog.color.copy(cMix);
+  scene.background.copy(cMix);
+
+  cA.set(PANTHEON[i0].accent);  cB.set(PANTHEON[i1].accent);
+  cA2.set(PANTHEON[i0].accent2); cB2.set(PANTHEON[i1].accent2);
+  seaU.uColor.value.copy(cA).lerp(cB, fr);
+  seaU.uColor2.value.copy(cA2).lerp(cB2, fr);
+  godLight.color.copy(cA2).lerp(cB2, fr);
+  godLight.intensity = 45 + audio * 110;
+
+  /* --- lights travel with the fall --- */
+  focus.position.copy(focusPos);
+  keyLight.position.copy(focusPos).add(tmpW.set(7, 10, 8));
+  rimLight.position.copy(focusPos).add(tmpW.set(-9, 3, -8));
+  tmpW.copy(camera.position).sub(focusPos).normalize();
+  godLight.position.copy(focusPos).addScaledVector(tmpW, 5.5);
+  godLight.position.y += 2.5;
+
+  /* --- atmosphere --- */
+  if (dust){
+    dustU.uCamY.value = camera.position.y;
+    dustU.uSpeed.value = damp(dustU.uSpeed.value, clamp(S.vel * 0.4, 0, 1), 6, dt);
+    dustU.uTime.value = t;
+    dustU.uPix.value = QUALITY.dpr;
+  }
+  if (stars){
+    stars.position.copy(camera.position);
+    stars.material.uniforms.uPix.value = QUALITY.dpr;
+    stars.material.uniforms.uFade.value = clamp(1 - S.p / (N - 1) * 0.75, 0.18, 1);
+  }
+  if (sea){
+    sea.position.set(camera.position.x, focusPos.y - 27, camera.position.z);
+    seaU.uTime.value = t;
+    seaU.uAudio.value = audio;
+  }
+
+  /* --- HUD --- */
+  const barH = (bulge * 0.55 + clamp(S.vel * 0.06, 0, 0.45)) * Math.min(innerHeight * 0.11, 96);
+  el.barTop.style.height = barH.toFixed(1) + 'px';
+  el.barBot.style.height = barH.toFixed(1) + 'px';
+  el.tick.style.top = (S.p / (N - 1) * 100).toFixed(2) + '%';
+
+  const depth = Math.round(S.p * 180);
+  if (depth !== lastDepth){ lastDepth = depth; el.depth.textContent = depth; }
+
+  for (let i = 0; i < el.wave.length; i++){
+    const v = 0.16 + audio * (0.45 + 0.55 * Math.sin(t * (7 + i * 2.4) + i * 1.7)) * 1.1;
+    el.wave[i].style.height = (clamp(v, 0.12, 1) * 100).toFixed(1) + '%';
+  }
+
+  if (act !== S.active){
+    S.active = act;
+    paintGod(act, !S.entered);
+    if (S.entered) AudioEngine.setGod(PANTHEON[act], 1.8);
+  }
+
+  /* --- adaptive quality --- */
+  frames++; fpsAcc += dt;
+  if (fpsAcc >= 1){
+    const fps = frames / fpsAcc;
+    frames = 0; fpsAcc = 0;
+    el.btnFps.textContent = Math.round(fps) + ' fps';
+    if (!autoDropped && QUALITY.hi && fps < 42){
+      autoDropped = true; QUALITY.hi = false;
+      el.btnQuality.textContent = 'Lite';
+      el.btnQuality.setAttribute('data-on', 'false');
+      applyDpr();
+    }
+  }
+
+  renderer.render(scene, camera);
+}
+
+/* =========================== 9. BUILD SEQUENCE =========================== */
+const BUILD = [
+  ['Quarrying the marble', ()=>{
+    TEX.marble = makeMarbleTexture(1024, '#efe9dd', 'rgba(74,64,55,1)', 34);
+    TEX.glow   = makeGlowTexture();
+  }],
+  ['Kindling the sky', ()=>{
+    const envTex = makeEnvTexture();
+    const pmrem = new THREE_.PMREMGenerator(renderer);
+    pmrem.compileEquirectangularShader();
+    const rt = pmrem.fromEquirectangular(envTex);
+    scene.environment = rt.texture;
+    envTex.dispose();
+    pmrem.dispose();
+  }]
+].concat(PANTHEON.map((g,i)=>[
+  'Carving ' + g.name.charAt(0) + g.name.slice(1).toLowerCase(), ()=>{
+    const a = buildArtifact(g, i);
+    artifacts.push(a);
+    scene.add(a.group);
+    a.setPresence(0);
+  }
+])).concat([
+  ['Seeding the void', ()=>{
+    dust  = buildDust(2600);       scene.add(dust);
+    stars = buildStars(1400);      scene.add(stars);
+    sea   = buildSea();            scene.add(sea);
+  }],
+  ['Setting the lights', ()=>{
+    applyDpr();
+    gsap.set('.hud', { opacity: 0 });
+    fillPlaque(PANTHEON[0]);
+    gsap.set(el.godname.querySelectorAll('.ch'), { opacity: 0 });
+    if ('speechSynthesis' in window) window.speechSynthesis.getVoices();
+    frame();
+  }]
+]);
+
+function runBuild(step){
+  if (step >= BUILD.length){
+    el.loadPct.textContent = 'THE PANTHEON IS READY';
+    gsap.to(el.loadBar, { width: '100%', duration: 0.5, ease: 'power2.out' });
+    gsap.to(el.enterBtn, { opacity: 1, duration: 0.9, delay: 0.35, ease: 'power2.out',
+      onStart: ()=>{ el.enterBtn.style.pointerEvents = 'auto'; } });
+    gsap.to(el.enterNote, { opacity: 1, duration: 0.9, delay: 0.7 });
+    return;
+  }
+  const [label, fn] = BUILD[step];
+  el.loadPct.textContent = (label + ' — ' + Math.round(step / BUILD.length * 100) + '%').toUpperCase();
+  gsap.to(el.loadBar, { width: (step / BUILD.length * 100) + '%', duration: 0.5, ease: 'power2.out' });
+  RAF(()=>{
+    try { fn(); } catch(err){ console.error('build step failed:', label, err); }
+    setTimeout(()=>runBuild(step + 1), 40);
+  });
+}
+
+/* =========================== 10. ENTER =================================== */
+el.enterBtn.addEventListener('click', ()=>{
+  if (S.entered) return;
+  S.entered = true;
+
+  AudioEngine.init();
+  AudioEngine.resume();
+  AudioEngine.setAmbience(el.btnAmbience.getAttribute('data-on') === 'true', true);
+  AudioEngine.setGod(PANTHEON[0], 3.4);
+
+  gsap.to(el.threshold, { opacity: 0, duration: 1.15, ease: 'power2.inOut',
+    onComplete: ()=>{ el.threshold.style.display = 'none'; } });
+  gsap.to(S, { intro: 0, duration: REDUCED ? 0.6 : 3.6, ease: 'power3.inOut' });
+  gsap.to('.hud', { opacity: 1, duration: 1.3, delay: 0.5, stagger: 0.12, ease: 'power2.out' });
+
+  S.active = 0;
+  setTimeout(()=>paintGod(0, false), 700);
+});
+
+/* kick off — the render loop starts itself inside the final build step */
+clock.start();
+RAF(()=>runBuild(0));
+
+})();
+
+</script>
+</body>
+</html>
