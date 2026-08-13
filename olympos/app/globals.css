@@ -1,0 +1,294 @@
+@import "tailwindcss";
+
+/* ============================================================
+   TOKENS — palette is narrative: it descends with the camera
+   ============================================================ */
+:root{
+  --void:      #05070d;
+  --ink:       #0a0f18;
+  --marble:    #e8e2d4;
+  --marble-dim:#9a958a;
+
+  /* live accent — tweened per stratum by JS */
+  --accent:    #c9a227;
+  --accent-2:  #f0d68a;
+
+  /* Font variables injected by Next.js layout */
+  --font-display: var(--font-cinzel), "Trajan Pro", "Optima", "Palatino Linotype", Georgia, serif;
+  --font-body:    var(--font-cormorant), "Palatino Linotype", Georgia, serif;
+  --font-mono:    var(--font-ibm-plex), ui-monospace, "SF Mono", Menlo, monospace;
+
+  --gut: clamp(18px, 3.2vw, 54px);
+  --ease: cubic-bezier(.16,1,.3,1);
+}
+
+*{ margin:0; padding:0; box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  background: var(--void);
+  color: var(--marble);
+  font-family: var(--font-body);
+  overflow:hidden;
+  overscroll-behavior:none;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+  touch-action:none;
+  cursor:none;
+}
+@media (hover:none){ body{ cursor:auto; } }
+
+canvas{ display:block; }
+#stage{ position:fixed; inset:0; z-index:0; }
+
+/* ============================================================
+   ATMOSPHERE — vignette, film grain, letterbox
+   ============================================================ */
+.veil{ position:fixed; inset:0; z-index:2; pointer-events:none; }
+.veil.vignette{
+  background:
+    radial-gradient(120% 90% at 50% 45%, transparent 38%, rgba(2,3,7,.55) 78%, rgba(2,3,7,.92) 100%);
+  mix-blend-mode:multiply;
+}
+.veil.grain{
+  opacity:.055; mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/></filter><rect width='160' height='160' filter='url(%23n)' opacity='.5'/></svg>");
+  animation: grainShift 1.1s steps(3) infinite;
+}
+@keyframes grainShift{
+  0%{transform:translate(0,0)} 33%{transform:translate(-3%,2%)} 66%{transform:translate(2%,-3%)} 100%{transform:translate(0,0)}
+}
+.bar{ position:fixed; left:0; right:0; height:0; background:#020307; z-index:6; pointer-events:none; }
+.bar.top{ top:0; } .bar.bottom{ bottom:0; }
+
+/* ============================================================
+   CURSOR — a carved ring that reacts to the descent
+   ============================================================ */
+#cursor{
+  position:fixed; top:0; left:0; z-index:60; pointer-events:none;
+  width:26px; height:26px; margin:-13px 0 0 -13px; border-radius:50%;
+  border:1px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  transition: width .35s var(--ease), height .35s var(--ease), margin .35s var(--ease), border-color .8s linear, opacity .3s;
+  mix-blend-mode:screen;
+}
+#cursor.hot{ width:52px; height:52px; margin:-26px 0 0 -26px; border-color:var(--accent-2); }
+@media (hover:none){ #cursor{ display:none; } }
+
+/* ============================================================
+   HUD
+   ============================================================ */
+.hud{ position:fixed; z-index:5; }
+
+.hud-top{
+  top:0; left:0; right:0; padding:var(--gut);
+  display:flex; align-items:flex-start; justify-content:space-between; gap:24px;
+  pointer-events:none;
+}
+.mark{ pointer-events:auto; }
+.mark .glyph{
+  font-family:var(--font-display); font-size:clamp(15px,1.5vw,20px);
+  letter-spacing:.42em; font-weight:500; color:var(--marble);
+  text-shadow:0 0 26px rgba(0,0,0,.9);
+}
+.mark .sub{
+  margin-top:8px; font-family:var(--font-mono); font-size:10px; font-weight:300;
+  letter-spacing:.26em; text-transform:uppercase; color:var(--marble-dim);
+}
+
+.tools{ display:flex; gap:10px; pointer-events:auto; }
+.tool{
+  font-family:var(--font-mono); font-size:10px; letter-spacing:.18em; text-transform:uppercase;
+  color:var(--marble-dim); background:rgba(8,11,18,.35); backdrop-filter:blur(10px);
+  border:1px solid rgba(232,226,212,.14); border-radius:2px;
+  padding:9px 13px; cursor:none; transition:.35s var(--ease);
+  white-space:nowrap;
+}
+.tool:hover{ color:var(--marble); border-color:color-mix(in srgb, var(--accent) 60%, transparent); }
+.tool[data-on="true"]{ color:var(--accent-2); border-color:color-mix(in srgb, var(--accent) 55%, transparent); }
+.tool .dot{ display:inline-block; width:5px; height:5px; border-radius:50%; background:currentColor; margin-right:7px; vertical-align:middle; opacity:.8; }
+
+/* ---- depth rail (left) : encodes altitude, not decoration ---- */
+.rail{
+  left:var(--gut); top:50%; transform:translateY(-50%);
+  display:flex; align-items:center; gap:14px; pointer-events:none;
+}
+.rail .track{
+  width:1px; height:min(42vh,360px); background:linear-gradient(to bottom, transparent, rgba(232,226,212,.22) 12%, rgba(232,226,212,.22) 88%, transparent);
+  position:relative;
+}
+.rail .tick{
+  position:absolute; left:-4px; width:9px; height:1px; background:var(--accent);
+  box-shadow:0 0 14px var(--accent); transition:background .8s linear, box-shadow .8s linear;
+}
+.rail .notch{ position:absolute; left:-2px; width:5px; height:1px; background:rgba(232,226,212,.4); }
+.rail .read{
+  font-family:var(--font-mono); font-size:10px; letter-spacing:.16em; color:var(--marble-dim);
+  writing-mode:vertical-rl; text-orientation:mixed;
+}
+.rail .read b{ color:var(--accent); font-weight:400; transition:color .8s linear; }
+
+/* ---- index (right) ---- */
+.index{
+  right:var(--gut); top:50%; transform:translateY(-50%);
+  display:flex; flex-direction:column; gap:2px; align-items:flex-end; pointer-events:auto;
+}
+.idx{
+  display:flex; align-items:center; gap:12px; padding:9px 0 9px 18px;
+  background:none; border:0; cursor:none; text-align:right;
+  opacity:.42; transition:opacity .5s var(--ease), transform .5s var(--ease);
+  transform:translateX(0);
+}
+.idx:hover{ opacity:.85; transform:translateX(-6px); }
+.idx[aria-current="true"]{ opacity:1; transform:translateX(-10px); }
+.idx .nm{
+  font-family:var(--font-display); font-size:12px; letter-spacing:.3em; color:var(--marble); font-weight:400;
+}
+.idx[aria-current="true"] .nm{ color:var(--accent-2); }
+.idx .ln{ width:14px; height:1px; background:rgba(232,226,212,.35); transition:width .5s var(--ease), background .5s; }
+.idx[aria-current="true"] .ln{ width:40px; background:var(--accent); }
+
+/* ============================================================
+   PLAQUE — the carved placard. Signature typography moment.
+   ============================================================ */
+.plaque{
+  left:var(--gut); bottom:var(--gut); z-index:5;
+  width:min(46ch, 42vw); pointer-events:auto;
+}
+.eyebrow{
+  font-family:var(--font-mono); font-size:10px; letter-spacing:.3em; text-transform:uppercase;
+  color:var(--marble-dim); display:flex; align-items:center; gap:12px; margin-bottom:18px;
+}
+.eyebrow i{ font-style:normal; color:var(--accent); transition:color .8s linear; }
+.eyebrow s{ text-decoration:none; flex:1; height:1px; background:linear-gradient(to right, rgba(232,226,212,.3), transparent); }
+
+.godname{
+  font-family:var(--font-display); font-weight:500;
+  font-size:clamp(44px, 7.4vw, 116px); line-height:.92; letter-spacing:.02em;
+  display:flex; flex-wrap:wrap; perspective:700px;
+  text-shadow:0 14px 60px rgba(0,0,0,.75);
+}
+.godname .ch{ display:inline-block; transform-origin:50% 100%; will-change:transform,opacity; }
+.godname .sp{ width:.28em; }
+
+.greek{
+  font-family:var(--font-display); font-size:clamp(13px,1.35vw,17px);
+  letter-spacing:.34em; color:var(--accent); margin-top:14px; transition:color .8s linear;
+}
+.epithet{
+  font-family:var(--font-body); font-style:italic; font-weight:300;
+  font-size:clamp(16px,1.5vw,21px); color:var(--marble-dim); margin-top:6px;
+}
+.domains{
+  display:flex; flex-wrap:wrap; gap:8px; margin-top:20px;
+}
+.dom{
+  font-family:var(--font-mono); font-size:9.5px; letter-spacing:.2em; text-transform:uppercase;
+  color:var(--marble-dim); border:1px solid rgba(232,226,212,.16); border-radius:2px; padding:6px 10px;
+}
+.lore{
+  margin-top:20px; font-size:clamp(15px,1.35vw,18px); line-height:1.62; font-weight:300;
+  color:rgba(232,226,212,.76); max-width:44ch;
+}
+
+/* ---- listen ---- */
+.listen{
+  margin-top:26px; display:inline-flex; align-items:center; gap:14px;
+  background:rgba(8,11,18,.34); backdrop-filter:blur(14px);
+  border:1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius:2px; padding:13px 20px 13px 16px; cursor:none;
+  color:var(--marble); transition:.45s var(--ease);
+  position:relative; overflow:hidden;
+}
+.listen:before{
+  content:""; position:absolute; inset:0; background:var(--accent); opacity:0;
+  transition:opacity .45s var(--ease);
+}
+.listen:hover{ border-color:var(--accent); }
+.listen:hover:before{ opacity:.1; }
+.listen span{
+  position:relative; font-family:var(--font-mono); font-size:10.5px; letter-spacing:.24em; text-transform:uppercase;
+}
+.wave{ position:relative; display:flex; align-items:flex-end; gap:2.5px; height:15px; width:26px; }
+.wave b{
+  width:2px; background:var(--accent); height:20%; border-radius:1px; transform-origin:50% 100%;
+  transition:background .8s linear;
+}
+.listen[data-playing="true"]{ border-color:var(--accent); }
+
+/* ============================================================
+   SCROLL HINT
+   ============================================================ */
+.hint{
+  left:50%; bottom:calc(var(--gut) - 4px); transform:translateX(-50%);
+  display:flex; flex-direction:column; align-items:center; gap:10px; pointer-events:none;
+  font-family:var(--font-mono); font-size:9.5px; letter-spacing:.28em; text-transform:uppercase; color:var(--marble-dim);
+}
+.hint .drop{ width:1px; height:44px; background:linear-gradient(to bottom, transparent, var(--accent)); }
+.hint .drop:after{
+  content:""; display:block; width:1px; height:12px; background:var(--marble);
+  animation:fall 2.1s var(--ease) infinite;
+}
+@keyframes fall{ 0%{transform:translateY(-14px);opacity:0} 40%{opacity:1} 100%{transform:translateY(44px);opacity:0} }
+
+/* ============================================================
+   THRESHOLD (loader + enter gate)
+   ============================================================ */
+.threshold{
+  position:fixed; inset:0; z-index:40; background:var(--void);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0;
+  text-align:center; padding:24px;
+}
+.threshold .kicker{
+  font-family:var(--font-mono); font-size:10px; letter-spacing:.34em; text-transform:uppercase;
+  color:var(--marble-dim); margin-bottom:26px;
+}
+.threshold h1{
+  font-family:var(--font-display); font-weight:400;
+  font-size:clamp(38px,8.5vw,124px); letter-spacing:.16em; line-height:1;
+  color:var(--marble); text-indent:.16em;
+}
+.threshold .rule{ width:min(300px,52vw); height:1px; background:rgba(232,226,212,.2); margin:34px 0 30px; position:relative; }
+.threshold .rule i{ position:absolute; left:0; top:0; height:1px; width:0%; background:var(--accent); box-shadow:0 0 16px var(--accent); }
+.threshold .pct{ font-family:var(--font-mono); font-size:10px; letter-spacing:.28em; color:var(--marble-dim); }
+.threshold .tagline{
+  font-family:var(--font-body); font-style:italic; font-weight:300; font-size:clamp(16px,1.9vw,23px);
+  color:rgba(232,226,212,.6); max-width:34ch; margin-top:4px;
+}
+.enter{
+  margin-top:40px; opacity:0; pointer-events:none;
+  font-family:var(--font-mono); font-size:11px; letter-spacing:.3em; text-transform:uppercase;
+  color:var(--marble); background:transparent; border:1px solid var(--accent);
+  border-radius:2px; padding:17px 34px; cursor:none; position:relative; overflow:hidden;
+  transition:color .5s var(--ease), letter-spacing .5s var(--ease);
+}
+.enter i{ position:absolute; inset:0; background:var(--accent); transform:scaleY(0); transform-origin:50% 100%; transition:transform .55s var(--ease); }
+.enter span{ position:relative; }
+.enter:hover i{ transform:scaleY(1); }
+.enter:hover{ color:var(--void); letter-spacing:.36em; }
+.threshold .note{ margin-top:18px; font-family:var(--font-mono); font-size:9px; letter-spacing:.22em; color:rgba(232,226,212,.32); opacity:0; }
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width: 900px){
+  .plaque{ width:auto; right:var(--gut); bottom:calc(var(--gut) + 6px); }
+  .lore{ font-size:15px; max-width:none; }
+  .rail{ display:none; }
+  .hint{ display:none; }
+  .index{ right:12px; gap:0; }
+  .idx .nm{ display:none; }
+  .idx{ padding:10px 0 10px 20px; }
+  .idx .ln{ width:10px; }
+  .idx[aria-current="true"] .ln{ width:26px; }
+  .godname{ font-size:clamp(38px,13vw,72px); }
+  .domains .dom:nth-child(n+4){ display:none; }
+}
+@media (max-height: 620px){
+  .lore{ display:none; }
+  .index{ display:none; }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .veil.grain, .hint .drop:after{ animation:none; }
+}
+.sr{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+:focus-visible{ outline:1px solid var(--accent); outline-offset:4px; }
