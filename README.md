@@ -3,7 +3,6 @@
 # 🏛️ ΟΛΥΜΠΟΣ (Olympos)
 ### A Cinematic 3D Descent Through the Greek Pantheon
 
-[![Live Demo](https://img.shields.io/badge/Live_Demo-Visit_Site-2a2a2a?style=for-the-badge&logo=vercel)](https://greek-gods-ao7mv300c-kalix-07s-projects.vercel.app)
 [![Next.js](https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
 [![React Three Fiber](https://img.shields.io/badge/R3F-Three.js-black?style=for-the-badge&logo=threedotjs)](https://docs.pmnd.rs/react-three-fiber/)
 [![GSAP](https://img.shields.io/badge/GSAP-Animations-88CE02?style=for-the-badge&logo=greensock)](https://gsap.com/)
@@ -11,13 +10,6 @@
 An interactive, WebGL-powered journey through five strata of Greek mythology. Descend from the highest peaks of Mount Olympus down to the depths of the Underworld, encountering abstract, procedural representations of the gods along the way.
 
 </div>
-
----
-
-## 🌟 Live Experience
-
-Experience the full interactive descent (headphones recommended):
-🔗 **[Launch ΟΛΥΜΠΟΣ](https://greek-gods-ao7mv300c-kalix-07s-projects.vercel.app)**
 
 ---
 
